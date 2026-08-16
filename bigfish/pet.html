@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      background: #14141a;
+      overflow: hidden;
+      user-select: none;
+      cursor: grab;
+    }
+    #bubble {
+      position: absolute;
+      top: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #fff;
+      color: #333;
+      padding: 6px 11px;
+      border-radius: 12px;
+      font-size: 12px;
+      line-height: 1.4;
+      width: max-content;
+      max-width: 168px;
+      white-space: normal;
+      word-break: break-word;
+      text-align: center;
+      display: none;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+      z-index: 2;
+    }
+    #bubble.show { display: block; animation: pop .18s ease-out; }
+    #pet {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      display: block;
+      pointer-events: none;
+    }
+    @keyframes pop {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div id="bubble"></div>
+  <img id="pet" src="assets/pet/idle.png" draggable="false" alt="" style="height: 157px">
+  <script src="pet.js"></script>
+</body>
+</html>

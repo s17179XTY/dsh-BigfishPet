@@ -1,0 +1,11 @@
+# bigfish-pet bundle patch
+#
+# Mounts the plugin row when `bigfish-pet` is in the profile's bundle stack.
+# This file mirrors the profile-level mount line:
+#
+#   - insert:
+#       - id: bigfish-pet
+#         name: 'bigfish-pet'
+- insert:
+    - id: bigfish-pet
+      name: 'bigfish-pet'
