@@ -20,8 +20,9 @@
  *   - desktop pet: opaque window clipped to the character shape (setShape),
  *     always on top, config from ~/.dsh/pet.json, right-click minimizes/opens
  *     the main window, completion markers make it bubble "任务完成啦！"
- *   - auto update check, background image, launch at login, and a Windows
- *     "Open with Bigfish" context menu
+ *   - auto update check, launch at login, and a Windows "Open with Bigfish"
+ *     context menu (the injected background image feature is removed so the
+ *     DeepSeek Harness UI keeps its default theme)
  */
 
 const {
@@ -408,9 +409,7 @@ function createWindow() {
     }
   });
 
-  // 页面加载完成后注入半透明背景
-  mainWindow.webContents.on('did-finish-load', () => applyBackground());
-
+  // No background-image injection: the DeepSeek Harness UI keeps its default theme.
   mainWindow.loadURL(`http://${HOST}:${port}`);
 }
 
@@ -768,85 +767,11 @@ function createTray() {
   rebuildTrayMenu();
 }
 
-// ---------------------------------------------------------------------------
-// 背景图（默认 + 用户自定义）
-// ---------------------------------------------------------------------------
-let bgCssKey = null;
-
-function backgroundImagePath() {
-  const custom = path.join(app.getPath('userData'), 'custom-background.jpg');
-  return fs.existsSync(custom) ? custom : path.join(__dirname, 'assets', 'background.jpg');
-}
-
-/** 往主窗口注入背景样式（半透明背景图，内容在上层可读）。 */
-function applyBackground() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (bgCssKey) {
-    try { mainWindow.webContents.removeInsertedCSS(bgCssKey); } catch { /* ignore */ }
-    bgCssKey = null;
-  }
-  let dataUrl = '';
-  try {
-    const b64 = fs.readFileSync(backgroundImagePath()).toString('base64');
-    dataUrl = `data:image/jpeg;base64,${b64}`;
-  } catch { /* 读取失败则用纯色 */ }
-  const css = `
-    html {
-      background-image: url('${dataUrl}') !important;
-      background-size: cover !important;
-      background-position: center !important;
-      background-repeat: no-repeat !important;
-    }
-    /* 深色模式 */
-    body[data-ds-dark-theme] { background-color: rgba(21, 21, 23, 0.72) !important; }
-    body[data-ds-dark-theme] [class*="_sidebarCol"] { background-color: rgba(27, 27, 28, 0.80) !important; }
-    body[data-ds-dark-theme] [class*="_frame"],
-    body[data-ds-dark-theme] [class*="_root"],
-    body[data-ds-dark-theme] [class*="_centerCol"],
-    body[data-ds-dark-theme] [class*="_scrollBody"] { background-color: transparent !important; }
-    /* 浅色模式 */
-    body:not([data-ds-dark-theme]) { background-color: rgba(255, 255, 255, 0.75) !important; }
-    body:not([data-ds-dark-theme]) [class*="_sidebarCol"] { background-color: rgba(244, 244, 246, 0.85) !important; }
-    body:not([data-ds-dark-theme]) [class*="_frame"],
-    body:not([data-ds-dark-theme]) [class*="_root"],
-    body:not([data-ds-dark-theme]) [class*="_centerCol"],
-    body:not([data-ds-dark-theme]) [class*="_scrollBody"] { background-color: transparent !important; }
-  `;
-  mainWindow.webContents.insertCSS(css).then((key) => { bgCssKey = key; }).catch(() => {});
-}
-
-/** 让用户选一张图作为自定义背景。 */
-async function chooseBackground() {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: '选择背景图片',
-    filters: [{ name: '图片', extensions: ['jpg', 'jpeg', 'png', 'webp'] }],
-    properties: ['openFile'],
-  });
-  if (result.canceled || !result.filePaths[0]) return;
-  try {
-    fs.copyFileSync(result.filePaths[0], path.join(app.getPath('userData'), 'custom-background.jpg'));
-    applyBackground();
-    notify(APP_NAME, '背景已更换');
-  } catch (err) {
-    console.error('[bigfish] 更换背景失败:', err);
-  }
-}
-
-/** 恢复默认背景。 */
-function resetBackground() {
-  try { fs.unlinkSync(path.join(app.getPath('userData'), 'custom-background.jpg')); } catch { /* 没有自定义背景 */ }
-  applyBackground();
-  notify(APP_NAME, '已恢复默认背景');
-}
-
 function rebuildTrayMenu() {
   if (!tray) return;
   const menu = Menu.buildFromTemplate([
     { label: '显示 / 隐藏 Bigfish', click: () => toggleMainWindow() },
     { label: '新手向导（设置 API Key）', click: () => createWelcomeWindow() },
-    { type: 'separator' },
-    { label: '更换背景', click: () => chooseBackground() },
-    { label: '恢复默认背景', click: () => resetBackground() },
     { type: 'separator' },
     { label: '开机自启', type: 'checkbox', checked: settings.launchAtLogin, click: (item) => setAutoStart(item.checked) },
     { type: 'separator' },

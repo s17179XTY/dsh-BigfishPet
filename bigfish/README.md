@@ -14,7 +14,7 @@
 
 ```powershell
 # 目标：Bigfish 安装目录的 resources\app
-$app = 'E:\AI\Bigfish2\resources\app'   # 按实际安装路径调整
+$app = 'E:\AI\Bigfish\resources\app'   # 按实际安装路径调整
 Copy-Item main.js pet.html pet.js pet-preload.js pet-shapes.json $app -Force
 Copy-Item -Recurse assets\pet $app\assets\ -Force
 ```
