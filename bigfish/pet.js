@@ -27,10 +27,17 @@ function setSize(px) {
   // Fixed square box with object-fit: contain — the img element never changes
   // size/position between animation frames, so the setShape mask always lines
   // up with what is rendered (no clipping during eat/walk transitions).
+  const box = Math.round(px * 0.98);
   if (img) {
-    const box = Math.round(px * 0.98);
     img.style.width = box + 'px';
     img.style.height = box + 'px';
+  }
+  // The bubble scales with the whale so it never looks oversized/tiny.
+  if (bubble) {
+    bubble.style.fontSize = Math.max(9, Math.round(box / 13)) + 'px';
+    bubble.style.maxWidth = Math.round(box * 1.05) + 'px';
+    bubble.style.padding = Math.max(4, Math.round(box * 0.045)) + 'px ' + Math.max(7, Math.round(box * 0.08)) + 'px';
+    bubble.style.borderRadius = Math.round(box * 0.08) + 'px';
   }
 }
 
@@ -60,15 +67,22 @@ function showBubble(text) {
   if (!bubble) return;
   bubble.textContent = text;
   bubble.classList.add('show');
-  if (api) {
+  const report = () => {
+    if (!api || !bubble || !bubble.classList.contains('show')) return;
     const r = bubble.getBoundingClientRect();
     api.bubbleShow({ x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) });
-  }
+  };
+  report();
+  // Re-report while visible so the setShape mask always covers the CURRENT
+  // bubble rect (self-correcting against stale/clipped shapes).
+  if (bubble._reportTimer) clearInterval(bubble._reportTimer);
+  bubble._reportTimer = setInterval(report, 200);
   setTimeout(() => hideBubble(), 4500);
 }
 function hideBubble() {
   if (!bubble) return;
   bubble.classList.remove('show');
+  if (bubble._reportTimer) { clearInterval(bubble._reportTimer); bubble._reportTimer = null; }
   if (api) api.bubbleHide();
 }
 
