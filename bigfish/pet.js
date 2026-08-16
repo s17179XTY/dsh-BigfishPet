@@ -24,7 +24,14 @@ function currentFrame() {
 
 function setSize(px) {
   petSize = px;
-  if (img) img.style.height = Math.round(px * 0.98) + 'px';
+  // Fixed square box with object-fit: contain — the img element never changes
+  // size/position between animation frames, so the setShape mask always lines
+  // up with what is rendered (no clipping during eat/walk transitions).
+  if (img) {
+    const box = Math.round(px * 0.98);
+    img.style.width = box + 'px';
+    img.style.height = box + 'px';
+  }
 }
 
 function setState(s) {
@@ -89,7 +96,7 @@ window.addEventListener('mousemove', (e) => {
 window.addEventListener('mouseup', (e) => {
   if (e.button !== 0) return;
   if (dragging && !moved && api) api.clicked();
-  if (dragging && api) api.dragEnd();
+  if (dragging && moved && api) api.dragEnd();
   dragging = false;
   document.body.style.cursor = 'grab';
 });

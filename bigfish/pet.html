@@ -38,6 +38,7 @@
       transform: translateX(-50%);
       display: block;
       pointer-events: none;
+      object-fit: contain;
     }
     @keyframes pop {
       from { opacity: 0; }
@@ -47,7 +48,7 @@
 </head>
 <body>
   <div id="bubble"></div>
-  <img id="pet" src="assets/pet/idle.png" draggable="false" alt="" style="height: 157px">
+  <img id="pet" src="assets/pet/idle.png" draggable="false" alt="" style="width: 157px; height: 157px">
   <script src="pet.js"></script>
 </body>
 </html>

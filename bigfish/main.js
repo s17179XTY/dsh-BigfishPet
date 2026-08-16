@@ -690,8 +690,12 @@ function stopPetSync() {
 }
 
 // Clip the opaque pet window to the current frame's silhouette (+ the bubble
-// when it is showing). Dilation (+1) bridges rounding gaps between adjacent
-// mask rects so no thin lines show through the character.
+// when it is showing). The img renders in a FIXED square box with
+// object-fit:contain, so the mask maps deterministically:
+//   scale  = min(boxW/frameW, boxH/160)
+//   offset = box center − (frameW*scale)/2 (contain letterboxing)
+// Dilation (+1) bridges rounding gaps between adjacent mask rects so no thin
+// lines show through the character.
 function applyPetShape() {
   if (!petWindow || petWindow.isDestroyed()) return;
   try {
@@ -699,15 +703,18 @@ function applyPetShape() {
     if (!meta || !Array.isArray(meta.rects)) return;
     const bounds = petWindow.getBounds();
     const size = petLastApplied ? petLastApplied.size : 160;
-    const imgH = Math.round(size * 0.98);
-    const imgW = Math.round(imgH * meta.w / 160);
-    const imgX = Math.round((bounds.width - imgW) / 2);
-    const imgY = bounds.height - imgH;
-    const scale = imgH / 160;
+    const box = Math.round(size * 0.98);
+    const imgX = Math.round((bounds.width - box) / 2);
+    const imgY = bounds.height - box;
+    const scale = Math.min(box / meta.w, box / 160);
+    const renderedW = meta.w * scale;
+    const renderedH = 160 * scale;
+    const offsetX = imgX + (box - renderedW) / 2;
+    const offsetY = imgY + (box - renderedH) / 2;
     const out = [];
     for (const r of meta.rects) {
-      const x = Math.round(imgX + r[0] * scale);
-      const y = Math.round(imgY + r[1] * scale);
+      const x = Math.round(offsetX + r[0] * scale);
+      const y = Math.round(offsetY + r[1] * scale);
       const w = Math.max(1, Math.round(r[2] * scale) + 1);
       const h = Math.max(1, Math.round(r[3] * scale) + 1);
       out.push({ x, y, width: w, height: h });
