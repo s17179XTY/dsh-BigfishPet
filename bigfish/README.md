@@ -28,5 +28,6 @@ Copy-Item -Recurse assets\pet $app\assets\ -Force
 
 - 旧透明宠物窗口 → 不透明 + `setShape` 剪影窗口（透明窗口在某些系统不合成）；
 - 旧的目录 mtime 任务完成启发式（`notifyOnComplete`）→ 完成标记文件监视（宠物气泡）；
+- **背景图注入（`applyBackground` / 更换背景 / 恢复默认背景 / `assets/background.jpg`）→ 移除**，DSH 界面恢复默认主题；
 - 托盘「桌面萌宠 / 任务完成时通知」项（宠物显示由 DSH 设置页通过 `pet.json` 控制）；
 - 新增：`pet-drag-end`（拖动回写 `pet.json`）、`pet-right-clicked`（最小化/打开）、`pet-frame`/`pet-bubble-*`（按帧裁剪与气泡区域）、`pet-log-error`（渲染日志）。
