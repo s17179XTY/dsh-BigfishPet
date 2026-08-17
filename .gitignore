@@ -22,3 +22,6 @@ Thumbs.db
 dist/
 out/
 *.tgz
+
+# Vision toolkit scratch
+.dsh-vision-toolkit/

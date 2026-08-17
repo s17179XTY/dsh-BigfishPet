@@ -29,8 +29,18 @@
       text-align: center;
       display: none;
       z-index: 2;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.35);
     }
     #bubble.show { display: block; animation: pop .18s ease-out; }
+    #bubble-detail {
+      display: block;
+      font-size: 10px;
+      opacity: 0.65;
+      margin-top: 2px;
+      line-height: 1.35;
+      white-space: normal;
+      word-break: break-word;
+    }
     #pet {
       position: absolute;
       bottom: 0;
@@ -47,7 +57,7 @@
   </style>
 </head>
 <body>
-  <div id="bubble"></div>
+  <div id="bubble"><span id="bubble-msg"></span><span id="bubble-detail"></span></div>
   <img id="pet" src="assets/pet/idle.png" draggable="false" alt="" style="width: 157px; height: 157px">
   <script src="pet.js"></script>
 </body>

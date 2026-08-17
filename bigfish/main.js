@@ -434,19 +434,25 @@ function toggleMainWindowMinimize() {
 
 // ---------------------------------------------------------------------------
 // Desktop pet — an ALWAYS-ON-TOP shaped window, driven by the DSH-side
-// bigfish-pet plugin through ~/.dsh/pet.json (visible / size / right / bottom).
+// bigfish-pet plugin through ~/.dsh/pet.json (visible / size / right / bottom)
+// and by the DSH status machine (pet.json#status): the pet shows a status card
+// (state / stage / task / progress), animates per state (thinking → idle,
+// waiting → sleep, success → celebrate), and walks toward the mouse cursor
+// side (cursor left → walk-left, cursor right → walk-right).
 //
 // This system cannot composite transparent windows (the GPU compositor drops
 // them and alternate rendering configurations hang the main window), so the
 // pet is an OPAQUE window clipped to the character silhouette with
 // win.setShape() — only the art is visible, no background rectangle.
 // Right-click toggles (minimize/open) the main window; dragging writes the
-// new position back to pet.json; completion markers make it bubble.
+// new position back to pet.json.
 // ---------------------------------------------------------------------------
 const PET_QUOTES_DEFAULT_NAME = '鲸鱼娘';
 const DEFAULT_PET_STATE = {
   name: '鲸鱼娘',
   display: { visible: true, size: 160, right: 24, bottom: 24 },
+  notify: { complete: true },
+  status: undefined,
 };
 
 // Whale silhouette masks (PNG-native space) for the OS-level window region.
@@ -467,9 +473,15 @@ function readPetState() {
     return {
       name: typeof parsed.name === 'string' ? parsed.name : DEFAULT_PET_STATE.name,
       display: { ...DEFAULT_PET_STATE.display, ...(parsed.display || {}) },
+      notify: { ...DEFAULT_PET_STATE.notify, ...(parsed.notify || {}) },
+      status: parsed.status || undefined,
     };
   } catch {
-    return { ...DEFAULT_PET_STATE, display: { ...DEFAULT_PET_STATE.display } };
+    return {
+      ...DEFAULT_PET_STATE,
+      display: { ...DEFAULT_PET_STATE.display },
+      notify: { ...DEFAULT_PET_STATE.notify },
+    };
   }
 }
 function writePetDisplay(patch) {
@@ -483,26 +495,19 @@ function writePetDisplay(patch) {
 }
 
 let petState = 'idle';
-let wanderTimer = null;
-let sleepTimer = null;
 let eatTimer = null;
 let moveTimer = null;
-let chatterTimer = null;
 let petConfigTimer = null;
-let petMarkerTimer = null;
-let petMarkerLines = 0;
+let petCursorTimer = null;
 let petLastApplied = null;
 let petCurrentFrame = 'idle.png';
 let petBubbleRect = null;
-let petStateTimersStarted = false;
+let petLastStatusKey = null;
 
 function clearPetTimers() {
-  clearTimeout(wanderTimer);
-  clearTimeout(sleepTimer);
   clearTimeout(eatTimer);
-  clearTimeout(chatterTimer);
   clearInterval(moveTimer);
-  wanderTimer = sleepTimer = eatTimer = moveTimer = chatterTimer = null;
+  eatTimer = moveTimer = null;
 }
 
 function createPetWindow() {
@@ -541,12 +546,10 @@ function createPetWindow() {
     applyPetShape();
   });
   petWindow.on('closed', () => { petWindow = null; });
-  ensurePetStateTimers();
 }
 
 function destroyPetWindow() {
   clearPetTimers();
-  petStateTimersStarted = false;
   if (petWindow && !petWindow.isDestroyed()) petWindow.destroy();
   petWindow = null;
 }
@@ -558,33 +561,10 @@ function setPetState(state) {
   }
 }
 
-function scheduleSleep() {
-  clearTimeout(sleepTimer);
-  sleepTimer = setTimeout(() => {
-    if (petState === 'idle') setPetState('sleep');
-  }, 120 * 1000); // 2 min idle -> sleep
-}
-
-function wakePet() {
-  clearTimeout(sleepTimer);
-  if (petState === 'sleep') setPetState('idle');
-  scheduleSleep();
-}
-
-function scheduleWander() {
-  clearTimeout(wanderTimer);
-  wanderTimer = setTimeout(() => {
-    if (petState === 'idle') doWander();
-    else scheduleWander();
-  }, 15000 + Math.random() * 20000);
-}
-
-function doWander() {
-  if (!petWindow || petWindow.isDestroyed() || petState !== 'idle') {
-    scheduleWander();
-    return;
-  }
-  const dir = Math.random() < 0.5 ? 'left' : 'right';
+// Walk toward the cursor side: cursor left of the window → walk-left,
+// cursor right → walk-right (replaces the old random wander).
+function doWander(dir) {
+  if (!petWindow || petWindow.isDestroyed() || petState !== 'idle') return;
   const [x, y] = petWindow.getPosition();
   const { workAreaSize } = screen.getPrimaryDisplay();
   const distance = 100 + Math.random() * 180;
@@ -602,19 +582,30 @@ function doWander() {
       clearInterval(moveTimer);
       moveTimer = null;
       setPetState('idle');
-      scheduleWander();
+      // 走完按 pet.json 恢复真实状态（可能已变成 sleep 等）
+      applyPetConfig();
     }
   }, 16);
 }
 
-function schedulePetChatter() {
-  clearTimeout(chatterTimer);
-  chatterTimer = setTimeout(() => {
-    if (petWindow && !petWindow.isDestroyed() && petState === 'idle') {
-      petSay(PET_QUOTES[Math.floor(Math.random() * PET_QUOTES.length)]);
-    }
-    schedulePetChatter();
-  }, 90000); // 固定 1.5 分钟说一句
+// Cursor-direction walk: while the pet is idle, walk toward the side the
+// mouse cursor is on (offset beyond a dead zone).
+function startCursorWalk() {
+  stopCursorWalk();
+  petCursorTimer = setInterval(() => {
+    if (!petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return;
+    if (petState !== 'idle') return;
+    const cursor = screen.getCursorScreenPoint();
+    const [x, y] = petWindow.getPosition();
+    const [w] = petWindow.getSize();
+    const dx = cursor.x - (x + w / 2);
+    if (Math.abs(dx) < 70) return;
+    doWander(dx < 0 ? 'left' : 'right');
+  }, 600);
+  petCursorTimer.unref?.();
+}
+function stopCursorWalk() {
+  if (petCursorTimer) { clearInterval(petCursorTimer); petCursorTimer = null; }
 }
 
 function petSay(msg) {
@@ -623,8 +614,8 @@ function petSay(msg) {
   }
 }
 
-function celebratePet(text) {
-  petSay(text);
+function celebratePet(text, bubble = true) {
+  if (bubble) petSay(text);
   setPetState('eat');
   if (eatTimer) clearTimeout(eatTimer);
   eatTimer = setTimeout(() => {
@@ -632,12 +623,46 @@ function celebratePet(text) {
   }, 2600);
 }
 
-function ensurePetStateTimers() {
-  if (petStateTimersStarted) return;
-  petStateTimersStarted = true;
-  scheduleWander();
-  scheduleSleep();
-  schedulePetChatter();
+// DSH 状态机输出（pet.json#status）→ 状态卡（pet-status IPC）+ 动画映射 +
+// 一次性 flash（SUCCESS 庆祝 / ERROR 提示）。key 去重：同一状态只消费一次。
+const STATUS_ANIMATION = {
+  IDLE: 'idle',
+  THINKING: 'idle',
+  WORKING: 'idle',
+  WAITING: 'sleep',
+  SUCCESS: 'eat',
+  ERROR: 'idle',
+};
+
+function handlePetStatus(status, notifyComplete) {
+  const key = [
+    status?.sessionId ?? '',
+    status?.state ?? '',
+    status?.activity ?? '',
+    status?.message ?? '',
+    status?.task ?? '',
+    status?.progress?.completed ?? '',
+    status?.progress?.total ?? '',
+    status?.flash ?? '',
+  ].join('|');
+  if (key === petLastStatusKey) return;
+  petLastStatusKey = key;
+
+  if (petWindow && !petWindow.isDestroyed()) {
+    petWindow.webContents.send('pet-status', {
+      state: status?.state ?? 'IDLE',
+      message: status?.message ?? '',
+      detail: status?.detail ?? '',
+    });
+  }
+
+  if (status?.flash === 'SUCCESS') {
+    celebratePet(status.message || '任务完成啦！🎉', notifyComplete !== false);
+  } else if (status?.flash === 'ERROR') {
+    petSay(status?.message || '刚才的操作遇到一点问题呢');
+  } else {
+    setPetState(STATUS_ANIMATION[status?.state] || 'idle');
+  }
 }
 
 // Apply ~/.dsh/pet.json (visibility, size, position) to the floating window.
@@ -678,15 +703,20 @@ function applyPetConfig() {
     petLastApplied = { size, right, bottom };
     applyPetShape();
   }
+
+  // 状态机输出（思考/工作/等待/完成/出错 + 阶段/待办/进度）→ 状态卡与动画。
+  handlePetStatus(state.status, state.notify?.complete !== false);
 }
 
 function startPetSync() {
   stopPetSync();
   applyPetConfig();
   petConfigTimer = setInterval(applyPetConfig, 2000);
+  startCursorWalk();
 }
 function stopPetSync() {
   if (petConfigTimer) { clearInterval(petConfigTimer); petConfigTimer = null; }
+  stopCursorWalk();
 }
 
 // Clip the opaque pet window to the current frame's silhouette (+ the bubble
@@ -726,38 +756,12 @@ function applyPetShape() {
   }
 }
 
-// Completion markers written by the DSH bigfish-pet plugin (root-session
-// agent running → idle): the pet bubbles "任务完成啦！" — pet behavior only,
-// no OS notification.
-function petMarkerPath() {
-  return path.join(dshHome(), 'bigfish-completions.jsonl');
-}
-function countPetMarkers() {
-  try {
-    const text = fs.readFileSync(petMarkerPath(), 'utf8');
-    let lines = 0;
-    for (let i = 0; i < text.length; i++) {
-      if (text.charCodeAt(i) === 10) lines++;
-    }
-    return lines;
-  } catch {
-    return 0;
-  }
-}
-function startPetMarkerWatch() {
-  stopPetMarkerWatch();
-  petMarkerLines = countPetMarkers();
-  petMarkerTimer = setInterval(() => {
-    const lines = countPetMarkers();
-    if (lines > petMarkerLines) {
-      petMarkerLines = lines;
-      celebratePet('任务完成啦！🎉');
-    }
-  }, 3000);
-}
-function stopPetMarkerWatch() {
-  if (petMarkerTimer) { clearInterval(petMarkerTimer); petMarkerTimer = null; }
-}
+// Task completion celebration is driven by the DSH status machine: the
+// bigfish-pet plugin writes pet.json#status and flashes SUCCESS on
+// turn/end completed, which handlePetStatus() turns into a bubble + eat
+// animation. (The plugin still appends ~/.dsh/bigfish-completions.jsonl for
+// backward compatibility with stock shells, but this shell no longer watches
+// that file.)
 
 // ---------------------------------------------------------------------------
 // Tray
@@ -902,7 +906,6 @@ if (!gotLock) {
     createTray();
     registerShortcuts();
     startPetSync();
-    startPetMarkerWatch();
     setTimeout(checkForUpdates, 5000);
     if (settings.launchAtLogin) setAutoStart(true);
     if (!settings.onboardingDone) createWelcomeWindow();
@@ -922,7 +925,6 @@ if (!gotLock) {
     quitting = true;
     globalShortcut.unregisterAll();
     stopPetSync();
-    stopPetMarkerWatch();
     destroyPetWindow();
     stopDsh();
   });
@@ -950,11 +952,8 @@ if (!gotLock) {
     // 用户开始拖动：立即停掉走动动画，避免瞬移
     if (moveTimer) { clearInterval(moveTimer); moveTimer = null; }
     if (petState === 'walk-left' || petState === 'walk-right') setPetState('idle');
-    // 停下后重新安排下一次散步（不阻断后续走动）
-    scheduleWander();
     petDragStartScreen = { x, y };
     petDragStartPos = petWindow.getPosition();
-    wakePet();
   });
   ipcMain.on('pet-drag-move', (_e, { x, y }) => {
     if (!petWindow || petWindow.isDestroyed() || !petDragStartScreen || !petDragStartPos) return;
@@ -972,9 +971,10 @@ if (!gotLock) {
     const bottom = Math.max(0, workAreaSize.height - wy - wh);
     writePetDisplay({ right, bottom });
     petLastApplied = null; // re-sync from the file next tick
+    setPetState('idle');
+    applyPetConfig();
   });
   ipcMain.on('pet-clicked', () => {
-    wakePet();
     petSay(PET_QUOTES[Math.floor(Math.random() * PET_QUOTES.length)]);
     setPetState('eat');
     if (eatTimer) clearTimeout(eatTimer);
@@ -983,7 +983,6 @@ if (!gotLock) {
     }, 1500);
   });
   ipcMain.on('pet-right-clicked', () => {
-    wakePet();
     petSay('要我帮忙吗？');
     toggleMainWindowMinimize();
   });

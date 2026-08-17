@@ -1,10 +1,10 @@
 # dsh-BigfishPet — DeepSeek Harness 桌宠插件（鲸鱼娘 🐳）
 
-**这是针对 DeepSeek Harness 的通用桌宠插件**，不是 Bigfish 应用或 DSH Desktop 的专属功能——Bigfish、DSH Desktop 都只是它运行于其中的壳。任何 DeepSeek Harness 环境只要运行 `dsh plugin` 命令即可安装：插件管理桌宠状态与任务完成信号，宠物窗口由「壳侧整合」提供（完整安装流程见下文，两步都要做）。
+**这是针对 DeepSeek Harness 的通用桌宠插件**，不是 Bigfish 应用或 DSH Desktop 的专属功能——Bigfish、DSH Desktop 都只是它运行于其中的壳。任何 DeepSeek Harness 环境只要运行 `dsh plugin` 命令即可安装：插件内置**状态机**（借鉴 [dsh-dafeiyu](https://github.com/QCYTSN/dsh-dafeiyu)），把真实任务事件归约为 思考/工作/等待/完成/出错 并驱动桌宠状态卡；宠物窗口由「壳侧整合」提供（完整安装流程见下文，两步都要做）。
 
-桌宠原型来自 [Bigfish](https://github.com/turtle2209/Bigfish/)（DeepSeek Harness 的第三方桌面壳），本插件把它插件化，成为 DSH 的一等公民：在 DSH 设置里直接调整，状态持久化、任务完成走真实信号。
+桌宠原型来自 [Bigfish](https://github.com/turtle2209/Bigfish/)（DeepSeek Harness 的第三方桌面壳），本插件把它插件化，成为 DSH 的一等公民：在 DSH 设置里直接调整，状态持久化、任务状态走真实信号。
 
-> **能力边界一句话**：插件（任何 DSH 环境都能装）提供设置页、`pet.json` 状态与完成信号；宠物窗口需要 Electron 壳创建——本仓库提供 Bigfish 壳的现成整合，其他 Electron 壳（如 DSH Desktop）可做等价整合（见「安装到 DeepSeek Harness（完整流程）」）。
+> **能力边界一句话**：插件（任何 DSH 环境都能装）提供设置页、`pet.json` 状态机输出与完成信号；宠物窗口需要 Electron 壳创建——本仓库提供 Bigfish 壳的现成整合，其他 Electron 壳（如 DSH Desktop）可做等价整合（见「安装到 DeepSeek Harness（完整流程）」）。
 
 ## 这是什么
 
@@ -12,19 +12,21 @@ DeepSeek Harness 本身是 Web 后端 + 浏览器界面，**没有创建桌面�
 
 | 部分 | 位置 | 职责 |
 | --- | --- | --- |
-| **DSH 插件**（通用，必装） | 仓库根目录（`lib/`、`package.json`） | DSH 设置里的「桌宠」页：显示开关、大小（带默认刻度尺）、位置、改名、摸头/喂食、任务完成提醒；状态存 `~/.dsh/pet.json`；监听真实 `agent/status` 事件写完成标记。任何 Harness 环境都能装，只依赖 DSH 标准接口，不依赖任何特定壳 |
-| **壳侧整合**（按壳装） | `bigfish/` 目录（Bigfish 壳的参考实现） | 置顶的**剪影宠物窗口**（`win.setShape()` 按角色轮廓裁剪，无背景矩形），由插件通过 `pet.json` 驱动；任务完成时气泡「任务完成啦！🎉」。宠物窗口代码只依赖标准 Electron API + `pet.json`，**不绑定 Bigfish**——任何 Electron 壳都能做等价整合 |
+| **DSH 插件**（通用，必装） | 仓库根目录（`lib/`、`package.json`） | DSH 设置里的「桌宠」页：显示开关、大小（带默认刻度尺）、位置、改名、任务完成提醒；状态存 `~/.dsh/pet.json`。内置**状态机**（`lib/pet-status-reducer.js`，借鉴 dsh-dafeiyu）：监听 `session/event` 把真实任务归约为 思考/工作/等待/完成/出错 + 阶段/待办/进度，写 `pet.json#status`。任何 Harness 环境都能装，只依赖 DSH 标准接口，不依赖任何特定壳 |
+| **壳侧整合**（按壳装） | `bigfish/` 目录（Bigfish 壳的参考实现） | 置顶的**剪影宠物窗口**（`win.setShape()` 按角色轮廓裁剪，无背景矩形），显示**状态卡**（主文案 + `项目 · 已完成 x/y 步 · 当前待办`）；动画随状态变化（等待→睡觉、完成→庆祝）；空闲时**朝鼠标方向走动**（鼠标在左→向左走，在右→向右走）。宠物窗口代码只依赖标准 Electron API + `pet.json`，**不绑定 Bigfish**——任何 Electron 壳都能做等价整合 |
 
-为什么这么拆：宠物窗口本质是 Electron 窗口，DSH 插件跑在 Web 后端里建不了窗口，所以窗口由壳提供、配置与信号由插件管——两边通过 `~/.dsh/pet.json` 和 `~/.dsh/bigfish-completions.jsonl` 协作。
+为什么这么拆：宠物窗口本质是 Electron 窗口，DSH 插件跑在 Web 后端里建不了窗口，所以窗口由壳提供、状态与信号由插件管——两边通过 `~/.dsh/pet.json` 协作。
 
 ## 功能
 
 - **置顶悬浮**，Bigfish 隐藏/最小化也不消失；
 - **剪影显示**：部分系统不合成透明窗口（本项目目标机器即是），宠物用不透明窗口 + 角色轮廓裁剪，只显示鲸鱼本身、无背景矩形；
-- **右键** = 最小化（到任务栏）/ 打开壳主窗口（在 Bigfish 壳中即为 Bigfish）；**左键** = 说话 + 吃东西动画；1.5 分钟随机说话、3 分钟睡觉、随机散步；
+- **真实状态驱动**（借鉴 dsh-dafeiyu 状态机）：思考/工作/等待/完成/出错五态 + 阶段（查找/实现/验证/执行）+ 当前待办 + 真实进度（`已完成 3/5 步`，无待办数据不编造）；多任务时按 等待>出错>工作>思考 优先显示最需要注意的；
+- **状态卡气泡**：常驻显示主文案 + detail 行（`项目 · 已完成 x/y 步 · 当前待办`）；完成时庆祝「任务完成啦！🎉」，等待确认时打盹，出错时提示；
+- **鼠标方向走动**：空闲时鼠标在宠物左边 → 向左走（walk-left），在右边 → 向右走（walk-right）；
+- **右键** = 最小化（到任务栏）/ 打开壳主窗口（在 Bigfish 壳中即为 Bigfish）；**左键** = 说话 + 吃东西动画；
 - **拖动**换位置（回写 `pet.json`，设置页同步）；
-- **任务完成**（根会话 agent running → idle）= 气泡提醒 + 亲密度回合 +1（每 10 回合奖励 1 颗零食）——真实信号，不是目录 mtime 猜测；
-- 设置页**大小滑块带刻度尺**，默认 160px 突出标记。
+- 设置页**大小滑块带刻度尺**，默认 160px 突出标记；底部只读展示当前状态机输出。
 
 ## 安装到 DeepSeek Harness（完整流程）
 
@@ -55,7 +57,7 @@ Copy-Item -Recurse dsh-BigfishPet "$profile\node_modules\bigfish-pet"
 #       name: 'bigfish-pet'
 ```
 
-插件会创建/读取 `~/.dsh/pet.json`（宠物状态）与 `~/.dsh/bigfish-completions.jsonl`（完成标记）。
+插件会创建/读取 `~/.dsh/pet.json`（宠物状态 + 状态机输出）与 `~/.dsh/bigfish-completions.jsonl`（完成标记，兼容旧壳）。
 
 ### 第 2 步：壳侧整合（让宠物窗口出现，按你的壳选一种）
 
@@ -72,11 +74,11 @@ Copy-Item -Recurse bigfish\assets\pet $app\assets\ -Force
 
 重启 Bigfish。宠物按 `~/.dsh/pet.json` 显示（默认鲸鱼娘 / 160px / 右下角 / 可见）。
 
-**方式 B——其他 Electron 壳（如 DSH Desktop）做等价整合**：宠物窗口代码**不绑定 Bigfish**，只依赖标准 Electron 主进程 API 和两个文件（`~/.dsh/pet.json`、`~/.dsh/bigfish-completions.jsonl`）。接入步骤：
+**方式 B——其他 Electron 壳（如 DSH Desktop）做等价整合**：宠物窗口代码**不绑定 Bigfish**，只依赖标准 Electron 主进程 API 和一个文件（`~/.dsh/pet.json`，含状态机输出 `status`）。接入步骤：
 
 1. 把 `bigfish/` 里的宠物资源复制进壳的应用目录：`pet.html`、`pet.js`、`pet-preload.js`、`pet-shapes.json`、`assets/pet/`；
-2. 把 `bigfish/main.js` 中「Desktop pet」段（`createPetWindow` / `applyPetConfig` / `applyPetShape` / 完成标记监视等）以及 `pet-*` IPC 处理器并入该壳的 main 进程；
-3. 在壳启动后调用 `startPetSync()` + `startPetMarkerWatch()`，退出时调用 `stopPetSync()` / `stopPetMarkerWatch()` / `destroyPetWindow()`；
+2. 把 `bigfish/main.js` 中「Desktop pet」段（`createPetWindow` / `applyPetConfig` / `handlePetStatus` / `applyPetShape` / 鼠标方向走动等）以及 `pet-*` IPC 处理器并入该壳的 main 进程；
+3. 在壳启动后调用 `startPetSync()`（含状态轮询与光标方向检测），退出时调用 `stopPetSync()` / `destroyPetWindow()`；
 4. 注意沿用「不透明窗口 + `win.setShape()` 剪影」方案（透明窗口在部分系统不合成，渲染配置改动可能卡死主窗口）。
 
 > 说明：`bigfish/main.js` 基于 Bigfish 0.1.1（保留自动更新、失败重试、新手向导、托盘等功能），并已移除背景图注入（恢复 DSH 默认主题）与旧的目录 mtime 任务完成通知；原版可备份为 `main.js.stock-0.1.1`。详见 `bigfish/README.md`。
@@ -102,10 +104,11 @@ Copy-Item -Recurse bigfish\assets\pet $app\assets\ -Force
 ├── package.json        # DSH 插件包声明（dsh.bundle.patch + dsh.client）
 ├── cordis.patch.yml    # 插件挂载行
 ├── lib/
-│   ├── index.js        # Host：/bigfish-pet/* 路由、pet.json、完成标记、主目录探测
-│   └── client.js       # Client：「桌宠」设置页（草稿+保存、大小刻度尺）
+│   ├── index.js        # Host：/bigfish-pet/* 路由、pet.json、状态机接入、完成标记、主目录探测
+│   ├── pet-status-reducer.js  # 状态机归约器（借鉴 dsh-dafeiyu）：session/event → status
+│   └── client.js       # Client：「桌宠」设置页（草稿+保存、大小刻度尺、当前状态只读区）
 └── bigfish/            # 壳侧整合参考实现（Bigfish 壳；其他 Electron 壳可做等价整合）
-    ├── main.js         # Bigfish 0.1.1 main.js + 桌宠整合（宠物窗口段可移植到任意 Electron 壳）
+    ├── main.js         # Bigfish 0.1.1 main.js + 桌宠整合（状态卡 / 鼠标方向走动 / 置顶剪影窗口）
     ├── pet.html / pet.js / pet-preload.js
     ├── pet-shapes.json # 10 帧角色轮廓矩形（win.setShape 裁剪）
     └── assets/pet/*.png
@@ -113,7 +116,8 @@ Copy-Item -Recurse bigfish\assets\pet $app\assets\ -Force
 
 ## 致谢
 
-桌宠原型来自 [Bigfish](https://github.com/turtle2209/Bigfish/)（DeepSeek Harness 第三方桌面壳）。
+- 桌宠原型来自 [Bigfish](https://github.com/turtle2209/Bigfish/)（DeepSeek Harness 第三方桌面壳）；
+- 状态机设计与状态展示借鉴 [dsh-dafeiyu](https://github.com/QCYTSN/dsh-dafeiyu)（MIT，QCYTSN）。
 
 ## License
 

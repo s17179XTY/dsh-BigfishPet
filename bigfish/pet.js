@@ -63,9 +63,21 @@ if (img) {
   });
 }
 
-function showBubble(text) {
+// Status card bubble: main message + detail line (project · progress · task),
+// driven by the DSH status machine. A left-click/say bubble temporarily
+// overlays it and then restores it.
+let lastStatus = null;
+let sayTimer = null;
+
+function renderBubble(msg, detail) {
   if (!bubble) return;
-  bubble.textContent = text;
+  const msgEl = document.getElementById('bubble-msg');
+  const detailEl = document.getElementById('bubble-detail');
+  if (msgEl) msgEl.textContent = msg || '';
+  if (detailEl) {
+    detailEl.textContent = detail || '';
+    detailEl.style.display = detail ? '' : 'none';
+  }
   bubble.classList.add('show');
   const report = () => {
     if (!api || !bubble || !bubble.classList.contains('show')) return;
@@ -77,7 +89,24 @@ function showBubble(text) {
   // bubble rect (self-correcting against stale/clipped shapes).
   if (bubble._reportTimer) clearInterval(bubble._reportTimer);
   bubble._reportTimer = setInterval(report, 200);
-  setTimeout(() => hideBubble(), 4500);
+}
+
+function showStatusCard(status) {
+  if (!status) return;
+  lastStatus = status;
+  if (sayTimer) { clearTimeout(sayTimer); sayTimer = null; }
+  renderBubble(status.message, status.detail);
+}
+
+function showBubble(text) {
+  // Temporary speech bubble; restore the status card after a few seconds.
+  renderBubble(text, '');
+  if (sayTimer) clearTimeout(sayTimer);
+  sayTimer = setTimeout(() => {
+    sayTimer = null;
+    if (lastStatus) showStatusCard(lastStatus);
+    else hideBubble();
+  }, 3000);
 }
 function hideBubble() {
   if (!bubble) return;
@@ -123,6 +152,7 @@ if (api) {
   api.onSay((msg) => showBubble(msg));
   api.onState((s) => setState(s));
   api.onSize((px) => setSize(px));
+  api.onStatus((status) => showStatusCard(status));
 }
 
 setState('idle');
