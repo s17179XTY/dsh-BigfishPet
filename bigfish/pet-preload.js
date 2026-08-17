@@ -15,4 +15,5 @@ contextBridge.exposeInMainWorld('petAPI', {
   onState: (callback) => ipcRenderer.on('pet-state', (_event, s) => callback(s)),
   onSize: (callback) => ipcRenderer.on('pet-size', (_event, px) => callback(px)),
   onStatus: (callback) => ipcRenderer.on('pet-status', (_event, status) => callback(status)),
+  onActivity: (callback) => ipcRenderer.on('pet-activity', (_event, activity) => callback(activity)),
 });

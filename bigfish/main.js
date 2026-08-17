@@ -452,8 +452,21 @@ const DEFAULT_PET_STATE = {
   name: '鲸鱼娘',
   display: { visible: true, size: 160, right: 24, bottom: 24 },
   notify: { complete: true },
+  activity: 'normal',
   status: undefined,
 };
+
+// 活跃程度 → 空闲呼吸（渲染进程）+ 鼠标方向走动灵敏度（本进程）。
+// quiet：不呼吸、走动迟钝；normal：轻呼吸、标准灵敏；lively：快呼吸、很灵敏。
+const ACTIVITY_SPEC = {
+  quiet: { deadzone: 120, interval: 1200 },
+  normal: { deadzone: 70, interval: 600 },
+  lively: { deadzone: 40, interval: 300 },
+};
+
+function normalizeActivity(value) {
+  return value === 'quiet' || value === 'lively' ? value : 'normal';
+}
 
 // Whale silhouette masks (PNG-native space) for the OS-level window region.
 const PET_SHAPES = require('./pet-shapes.json');
@@ -474,6 +487,7 @@ function readPetState() {
       name: typeof parsed.name === 'string' ? parsed.name : DEFAULT_PET_STATE.name,
       display: { ...DEFAULT_PET_STATE.display, ...(parsed.display || {}) },
       notify: { ...DEFAULT_PET_STATE.notify, ...(parsed.notify || {}) },
+      activity: normalizeActivity(parsed.activity),
       status: parsed.status || undefined,
     };
   } catch {
@@ -499,6 +513,7 @@ let eatTimer = null;
 let moveTimer = null;
 let petConfigTimer = null;
 let petCursorTimer = null;
+let petActivity = 'normal';
 let petLastApplied = null;
 let petCurrentFrame = 'idle.png';
 let petBubbleRect = null;
@@ -589,9 +604,11 @@ function doWander(dir) {
 }
 
 // Cursor-direction walk: while the pet is idle, walk toward the side the
-// mouse cursor is on (offset beyond a dead zone).
+// mouse cursor is on (offset beyond a dead zone). Sensitivity follows the
+// activity level (deadzone + poll interval), so changing it restarts the timer.
 function startCursorWalk() {
   stopCursorWalk();
+  const spec = ACTIVITY_SPEC[petActivity] || ACTIVITY_SPEC.normal;
   petCursorTimer = setInterval(() => {
     if (!petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return;
     if (petState !== 'idle') return;
@@ -599,9 +616,9 @@ function startCursorWalk() {
     const [x, y] = petWindow.getPosition();
     const [w] = petWindow.getSize();
     const dx = cursor.x - (x + w / 2);
-    if (Math.abs(dx) < 70) return;
+    if (Math.abs(dx) < spec.deadzone) return;
     doWander(dx < 0 ? 'left' : 'right');
-  }, 600);
+  }, spec.interval);
   petCursorTimer.unref?.();
 }
 function stopCursorWalk() {
@@ -702,6 +719,15 @@ function applyPetConfig() {
     petWindow.webContents.send('pet-size', Math.round(size));
     petLastApplied = { size, right, bottom };
     applyPetShape();
+  }
+
+  // 活跃程度：变化时推送渲染进程（呼吸动画）并重启走动检测（灵敏度）。
+  if (state.activity !== petActivity) {
+    petActivity = state.activity;
+    if (petWindow && !petWindow.isDestroyed()) {
+      petWindow.webContents.send('pet-activity', petActivity);
+    }
+    startCursorWalk();
   }
 
   // 状态机输出（思考/工作/等待/完成/出错 + 阶段/待办/进度）→ 状态卡与动画。

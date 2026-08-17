@@ -19,7 +19,9 @@
       background: #fff;
       color: #333;
       padding: 6px 11px;
-      border-radius: 12px;
+      /* 不透明窗口 + setShape 裁剪下，圆角四角会露出深色窗口背景（黑边感），
+         阴影更会沿裁剪线留下深色残留——所以用方形白卡、无阴影。 */
+      border-radius: 3px;
       font-size: 12px;
       line-height: 1.4;
       width: max-content;
@@ -29,7 +31,6 @@
       text-align: center;
       display: none;
       z-index: 2;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.35);
     }
     #bubble.show { display: block; animation: pop .18s ease-out; }
     #bubble-detail {

@@ -15,8 +15,38 @@ let state = 'idle';
 let frameIndex = 0;
 let animTimer = null;
 let petSize = 160;
+let activity = 'normal';
+let breathTimer = null;
 
 const api = (window.petAPI && typeof window.petAPI === 'object') ? window.petAPI : null;
+
+const BREATH = {
+  quiet: { period: 0, amp: 0 },
+  normal: { period: 4200, amp: 0.06 },
+  lively: { period: 2200, amp: 0.11 },
+};
+
+// Breathing: a subtle opacity pulse while idle (like blinking/observing).
+// Opacity never changes the img rect, so the setShape silhouette stays aligned.
+function startBreath() {
+  stopBreath();
+  const spec = BREATH[activity] || BREATH.normal;
+  if (!spec.period || !img) return;
+  const started = Date.now();
+  breathTimer = setInterval(() => {
+    const t = (Date.now() - started) / spec.period;
+    img.style.opacity = String(Math.max(0.5, 1 - spec.amp * (0.5 + 0.5 * Math.sin(2 * Math.PI * t))));
+  }, 120);
+}
+function stopBreath() {
+  if (breathTimer) { clearInterval(breathTimer); breathTimer = null; }
+  if (img) img.style.opacity = '1';
+}
+
+function setActivity(value) {
+  activity = value === 'quiet' || value === 'lively' ? value : 'normal';
+  if (state === 'idle') startBreath();
+}
 
 function currentFrame() {
   return (FRAMES[state] || FRAMES.idle)[frameIndex] || FRAMES.idle[0];
@@ -37,7 +67,7 @@ function setSize(px) {
     bubble.style.fontSize = Math.max(9, Math.round(box / 13)) + 'px';
     bubble.style.maxWidth = Math.round(box * 1.05) + 'px';
     bubble.style.padding = Math.max(4, Math.round(box * 0.045)) + 'px ' + Math.max(7, Math.round(box * 0.08)) + 'px';
-    bubble.style.borderRadius = Math.round(box * 0.08) + 'px';
+    bubble.style.borderRadius = '3px'; // 方形白卡：圆角大会在裁剪下露出深色背景
   }
 }
 
@@ -46,6 +76,7 @@ function setState(s) {
   state = s;
   frameIndex = 0;
   if (animTimer) { clearInterval(animTimer); animTimer = null; }
+  if (s === 'idle') startBreath(); else stopBreath();
   if (img) img.src = 'assets/pet/' + currentFrame();
   if (api) api.setFrame(currentFrame());
   if (FRAMES[s].length > 1 && FRAME_MS[s] > 0) {
@@ -153,7 +184,9 @@ if (api) {
   api.onState((s) => setState(s));
   api.onSize((px) => setSize(px));
   api.onStatus((status) => showStatusCard(status));
+  api.onActivity((a) => setActivity(a));
 }
 
 setState('idle');
 setSize(160);
+setActivity('normal');
