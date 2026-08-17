@@ -2,6 +2,8 @@
 
 把 [Bigfish](https://github.com/turtle2209/Bigfish/)（DeepSeek Harness 的桌面壳）里的**内置桌宠**，改造成一个标准的 **DeepSeek Harness 插件**——桌宠不再是壳的私货，而是 DSH 的一等公民：在 DSH 设置里直接调整，状态持久化、任务完成走真实信号。
 
+**通用插件**：不绑定 Bigfish 或 dsh-desktop 任何特定客户端。任何 DeepSeek Harness 环境只要运行 `dsh plugin` 命令即可安装（见下），插件只依赖 DSH 标准接口（HTTP 路由、client bundle、`agent/status` 事件）。注意：插件本身只提供设置页与状态——**宠物窗口需要壳侧整合**（见「为什么安装后看不到宠物？」），这是设计边界，不是插件缺陷。
+
 宠物名：**鲸鱼娘** 🐳
 
 ## 这是什么
@@ -10,8 +12,8 @@ Bigfish 自带一个桌面宠物窗口（透明悬浮、随机说话）。这个
 
 | 部分 | 位置 | 职责 |
 | --- | --- | --- |
-| **DSH 插件** | 仓库根目录（`lib/`、`package.json`） | DSH 设置里的「桌宠」页：显示开关、大小（带默认刻度尺）、位置、改名、摸头/喂食、任务完成提醒；状态存 `~/.dsh/pet.json`；监听真实 `agent/status` 事件写完成标记 |
-| **Bigfish 壳集成** | `bigfish/` 目录 | 置顶的**剪影宠物窗口**（`win.setShape()` 按角色轮廓裁剪，无背景矩形），由插件通过 `pet.json` 驱动；右键最小化/打开 Bigfish；任务完成时气泡「任务完成啦！🎉」 |
+| **DSH 插件**（通用，必装） | 仓库根目录（`lib/`、`package.json`） | DSH 设置里的「桌宠」页：显示开关、大小（带默认刻度尺）、位置、改名、摸头/喂食、任务完成提醒；状态存 `~/.dsh/pet.json`；监听真实 `agent/status` 事件写完成标记。任何 Harness 环境都能装，不依赖特定壳 |
+| **壳侧整合**（可选，按壳装） | `bigfish/` 目录 | 置顶的**剪影宠物窗口**（`win.setShape()` 按角色轮廓裁剪，无背景矩形），由插件通过 `pet.json` 驱动；右键最小化/打开 Bigfish；任务完成时气泡「任务完成啦！🎉」。目前只有 Bigfish 壳有这份整合 |
 
 为什么要拆：宠物窗口本质是 Electron 窗口，DSH 插件跑在 Web 后端里建不了窗口，所以窗口由壳提供、配置与信号由插件管——两边通过 `~/.dsh/pet.json` 和 `~/.dsh/bigfish-completions.jsonl` 协作。
 
@@ -26,16 +28,18 @@ Bigfish 自带一个桌面宠物窗口（透明悬浮、随机说话）。这个
 
 ## 安装插件到 DeepSeek Harness
 
-插件包是标准 DSH 插件（`dsh.bundle.patch` + `dsh.client` 声明），两种装法任选：
+插件包是标准 DSH 插件（`dsh.bundle.patch` + `dsh.client` 声明），两种装法任选。安装后**任何** DeepSeek Harness 环境（Bigfish 壳、DSH Desktop、纯 web profile…）的设置里都会出现「桌宠」页——安装只装插件本身，不涉及壳侧窗口代码。
 
-### 方法一：dsh plugin 命令（推荐）
+### 方法一：dsh plugin 命令（推荐，通用）
 
 ```bash
-# 在任意目录执行（profile 用 web，即 Bigfish / DSH Desktop 用的 profile）
+# 在任意目录执行；profile 用你要装的目标环境（如 web）
 dsh plugin --profile web add github:s17179XTY/dsh-BigfishPet
 ```
 
-装完后**重启 Bigfish / DSH Desktop**，DSH 设置里就会出现「桌宠」页。
+装完后**重启对应的 Harness 客户端**，设置里就会出现「桌宠」页。
+
+> 装完若**看不到宠物窗口**，属正常现象：插件不创建窗口，窗口由壳侧整合提供（见下文 FAQ）。
 
 ### 方法二：手动复制 + 挂载
 
@@ -53,9 +57,21 @@ Copy-Item -Recurse dsh-BigfishPet "$profile\node_modules\bigfish-pet"
 
 重启后生效。插件会创建/读取 `~/.dsh/pet.json`（宠物状态）与 `~/.dsh/bigfish-completions.jsonl`（完成标记）。
 
-## 应用 Bigfish 壳侧整合（让宠物窗口出现）
+## 为什么安装后看不到宠物？（FAQ）
 
-> 插件只提供设置页与状态；**宠物窗口本身由 Bigfish 的 main.js 创建**，需要把 `bigfish/` 里的文件装进 Bigfish 应用目录。
+插件**只提供设置页与状态**，它跑在 DSH 的 Web 后端里，**不能创建窗口**。宠物窗口由**壳侧代码**创建——本仓库 `bigfish/main.js` 就是 Bigfish 壳的整合实现。所以：
+
+| 场景 | 结果 |
+| --- | --- |
+| 在任何 Harness 客户端用 `dsh plugin` 命令安装插件 | ✅ 设置里出现「桌宠」页；`pet.json` 正常读写；完成信号正常记录 |
+| 该客户端**没有**壳侧整合（DSH Desktop、纯 web profile 等） | ⚠️ 只有设置页，**没有宠物窗口**——预期行为，不是插件 bug |
+| 该客户端**有**壳侧整合（装入了 `bigfish/` 文件的 Bigfish 壳） | ✅ 设置页 + 宠物窗口都出现 |
+
+要在其他客户端上也看到宠物，需要在该客户端的壳里做等价的窗口整合（参考 `bigfish/` 的实现），或使用已整合的 Bigfish 壳。排查顺序：① 壳侧文件是否装入客户端应用目录并重启 → ② `~/.dsh/pet.json` 的 `display.visible` 是否为 `true` → ③ 客户端是否为支持 Electron 窗口的桌面壳（纯浏览器访问无窗口能力）。
+
+## （可选）应用 Bigfish 壳侧整合，让宠物窗口出现
+
+> 插件只提供设置页与状态；**宠物窗口本身由 Bigfish 的 main.js 创建**。想让宠物在 Bigfish 壳里出现，才需要执行这一步——其他客户端请参考 `bigfish/` 做等价整合。
 
 ```powershell
 # 目标：Bigfish 安装目录的 resources\app（按实际安装路径调整）
@@ -79,7 +95,7 @@ Copy-Item -Recurse bigfish\assets\pet $app\assets\ -Force
 ├── lib/
 │   ├── index.js        # Host：/bigfish-pet/* 路由、pet.json、完成标记、主目录探测
 │   └── client.js       # Client：「桌宠」设置页（草稿+保存、大小刻度尺）
-└── bigfish/            # Bigfish 壳侧（宠物窗口渲染 + 整合后的 main.js）
+└── bigfish/            # 壳侧整合（可选，仅 Bigfish 壳需要；其他客户端参考它做等价整合）
     ├── main.js
     ├── pet.html / pet.js / pet-preload.js
     ├── pet-shapes.json # 10 帧角色轮廓矩形（win.setShape 裁剪）
