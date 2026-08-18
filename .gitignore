@@ -25,3 +25,7 @@ out/
 
 # Vision toolkit scratch
 .dsh-vision-toolkit/
+
+# Python
+__pycache__/
+*.pyc
