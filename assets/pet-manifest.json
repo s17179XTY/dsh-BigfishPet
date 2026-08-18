@@ -1,0 +1,31 @@
+{
+  "formatVersion": 1,
+  "characterId": "bigfishpet",
+  "baseSize": 160,
+  "maxFrameWidth": 160,
+  "maxFrameHeight": 211,
+  "clips": {
+    "idle": { "frames": ["idle.png"], "frameMs": 180, "loop": true, "motion": "breathe" },
+    "eat": { "frames": ["eat-1.png", "eat-2.png", "eat-3.png", "eat-4.png"], "frameMs": 220, "loop": true },
+    "sleep": { "frames": ["sleep.png"], "frameMs": 180, "loop": true },
+    "walk_left": { "frames": ["walk-left-1.png", "walk-left-2.png"], "frameMs": 240, "loop": true },
+    "walk_right": { "frames": ["walk-right-1.png", "walk-right-2.png"], "frameMs": 240, "loop": true }
+  },
+  "stateMap": {
+    "IDLE": "idle",
+    "THINKING": "idle",
+    "WORKING": "idle",
+    "WAITING": "sleep",
+    "SUCCESS": "eat",
+    "ERROR": "idle",
+    "DISCONNECTED": "idle"
+  },
+  "workingActivityMap": {
+    "searching": "idle",
+    "commanding": "idle",
+    "editing": "idle",
+    "testing": "idle",
+    "using-tool": "idle"
+  },
+  "idleMicroClips": []
+}

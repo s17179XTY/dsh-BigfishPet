@@ -4,42 +4,44 @@
 
 `dsh-bigfishpet` 把 Bigfish 的桌面宠物（**鲸鱼娘**）做成 DeepSeek Harness 的一等公民：
 
-- **DSH 插件**（仓库根目录）：**通用插件，不绑定任何特定壳/客户端**（Bigfish、dsh-desktop 都只是它运行的环境之一）。任何 DeepSeek Harness 环境只要执行 `dsh plugin --profile web add github:s17179XTY/dsh-BigfishPet`（或用对应 profile 的 `dsh plugin add`）即可安装。它在 DSH 设置里提供「桌宠」页（显示开关、大小[带默认刻度尺]、位置、改名、完成提醒），状态持久化到 `~/.dsh/pet.json`；内置**状态机**（借鉴 dsh-dafeiyu）：监听 DSH 标准 `session/event` 把真实任务归约为 思考/工作/等待/完成/出错 + 阶段/待办/进度，写 `pet.json#status` 驱动宠物。**无亲密度/零食系统**（已移除）。插件只依赖 DSH 标准接口，不依赖 Bigfish / dsh-desktop 的私有 API。
-- **壳侧整合**（`bigfish/`，**可选**）：置顶的**剪影窗口**——部分系统不合成透明窗口，所以宠物窗口用 `win.setShape()` 按角色轮廓裁剪（不透明、无背景矩形），由 DSH 插件通过 `pet.json` 驱动。这是 Bigfish 壳的整合示例；其他客户端想显示宠物需做等价的窗口整合（见下文「功能边界」）。
+- **DSH 插件**（仓库根目录）：**通用插件，不绑定任何特定壳/客户端**（Bigfish、dsh-desktop 都只是它运行的环境之一）。任何 DeepSeek Harness 环境只要执行 `dsh plugin --profile web add github:s17179XTY/dsh-BigfishPet`（或用对应 profile 的 `dsh plugin add`）即可安装。它在 DSH 设置里提供「桌宠」卡片（**dsh-dafeiyu 同款**：即时保存、气泡显示/气泡大小/活跃程度/减少动态/响应子 Agent/走动冷却等），配置存 `~/.dsh/pet.json`；内置**状态机 + 桌面 Helper**（照抄 dsh-dafeiyu 架构）：监听 DSH 标准 `session/event` 归约为 思考/工作/等待/完成/出错 + 阶段/待办/进度，通过 JSONL 协议实时驱动 **PySide6 透明宠物窗口**（`runtime/helper.py`）。**无亲密度/零食系统**（已移除）。
+- **桌面 Helper**（`runtime/` + `assets/`）：**PySide6 透明窗口**（`WA_TranslucentBackground`）——**本机已验证可正常合成**（此前的「不合成透明窗口」结论只对 Electron 成立，对 Qt 无效）；大圆角状态卡、浅底深图形状态图标、程序化动作（breathe 等）、拖动/右键菜单全部照抄 dsh-dafeiyu `helper.py`。窗口由插件 spawn，**与壳无关**——任何运行本插件的 DSH 环境都会出现宠物（一键安装，无壳侧整合）。
 
 ## 目录
 
 ```
 dsh-bigfishpet/
-├── lib/index.js               # 插件 Host：/bigfish-pet/* HTTP 路由、pet.json 读写、状态机接入、完成标记、主目录探测
-├── lib/pet-status-reducer.js  # 状态机归约器（借鉴 dsh-dafeiyu）：session/event → status（状态/阶段/待办/进度/项目）
-├── lib/client.js              # 插件 Client：「桌宠」设置页（草稿+保存；大小滑块带默认刻度尺；当前状态只读区）
+├── lib/index.js               # 插件 Host：/bigfish-pet/* 路由、pet.json 配置、session/event → CompanionReducer → Helper（照抄 dsh-dafeiyu）
+├── lib/client.js              # 插件 Client：「桌宠」设置卡片（dsh-dafeiyu 同款：即时保存、全部可配置项）
+├── lib/protocol.js            # Helper JSONL 协议（照抄 dsh-dafeiyu：hello/state/pulse/task/tasks/config/ping/shutdown）
+├── lib/companion-reducer.js   # 状态机归约器（照抄 dsh-dafeiyu：事件 → STATE/PULSE/TASK/TASKS 消息）
+├── lib/helper-process.js      # Helper 进程管理（照抄 dsh-dafeiyu：spawn/心跳/崩溃重启/快照重放）
+├── runtime/                   # PySide6 桌面 Helper（照抄 dsh-dafeiyu：helper.py + animation_model.py + layout_store.py）
+├── assets/
+│   ├── pet-manifest.json      # 动画清单（10 帧 → 状态映射；动作帧就位后升级）
+│   └── pet/*.png              # 鲸鱼娘动画帧（与 bigfish/assets/pet 同步）
 ├── cordis.patch.yml           # 插件挂载行
-├── package.json               # 插件包（dsh.bundle.patch + dsh.client）
-└── bigfish/                   # 壳侧整合（可选，仅 Bigfish 壳需要）
-    ├── main.js                # 0.1.1 基础 + 桌宠整合（置顶剪影窗口 / 状态卡 / 鼠标方向走动 / 右键最小化；无背景图注入）
-    ├── pet.html / pet.js / pet-preload.js
-    ├── pet-shapes.json        # 10 帧角色轮廓矩形（win.setShape 裁剪用，含原生宽高）
-    └── assets/pet/*.png       # 鲸鱼娘动画帧
+├── package.json               # 插件包（dsh.bundle.patch + dsh.client；files 含 lib/runtime/assets）
+└── bigfish/                   # 旧 Electron 壳侧桌宠（已停用：main.js 的 DISABLE_ELECTRON_PET=true；保留作参考/回退）
 ```
 
 ## 功能边界（改代码 / 排查「看不到宠物」前先读）
 
-- **插件不创建窗口**：DSH 插件跑在 Web 后端里，建不了 Electron 窗口。宠物窗口必须由**壳侧代码**创建——本仓库 `bigfish/main.js` 就是 Bigfish 壳的整合实现。
-- 因此在**没有壳侧整合**的客户端（如 dsh-desktop、纯 web profile、以及任何只装了插件没装壳侧文件的 Harness 环境）上，`dsh plugin add` 安装后**只会出现「桌宠」设置页**：`pet.json` 正常读写、`agent/status` 完成信号正常记录——但**不会有宠物窗口**。这是预期行为，不是插件 bug。
-- 排查「看不到宠物」的顺序：(1) 壳侧整合文件是否已装入该客户端的应用目录（如 Bigfish 的 `resources\app`）并重启；(2) `pet.json` 的 `display.visible` 是否为 `true`；(3) 客户端是否为支持 Electron 窗口的桌面壳（纯浏览器访问 web profile 无窗口能力）。
-- 若要让其他客户端也显示宠物，需要在该壳里做等价的窗口整合（参考 `bigfish/` 的实现），或让该客户端使用已整合的 Bigfish 壳。
+- **窗口由插件自带的 Helper 创建**（`runtime/helper.py`，PySide6 透明窗口）——任何 DSH 环境只要装了插件就会出宠物，**无需壳侧整合**（旧架构的「壳侧整合」已废弃，`bigfish/` 仅作参考）。
+- 排查「看不到宠物」：(1) 重启 DSH（插件启动时 spawn Helper）；(2) `~/.dsh/pet.json` 的 `display.visible` 是否为 `true`；(3) Python/PySide6 是否可用（`py -3 -c "import PySide6"`；正式版将打包 exe 随插件分发）；(4) Helper 冒烟测试：`py -3 runtime/helper.py`（需从插件目录跑，读 assets/pet-manifest.json）。
 
 ## 关键约定（改代码前必读）
 
 ### 状态与通信
 
 - **单一事实源**：`~/.dsh/pet.json`（name / display{visible,size,right,bottom} / notify / activity / bubbleScale / bubbleMode / bubbleStates / reducedMotion / walkCooldownMin / includeSubagents / status）。**无 affinity/treats**（亲密度系统已移除，POST /state 不再支持 action=pet|feed）。
-- **状态机（主信号）**：Host 监听 DSH 标准 `session/event`（`{ global: true }`，事件类型 turn/start、assistant/message、tool/call、tool/result、todo/write、turn/end、session/disposed…），由 `lib/pet-status-reducer.js` 归约为 IDLE/THINKING/WORKING/WAITING/SUCCESS/ERROR + stage（查找/实现/验证/执行阶段）+ task/progress（来自 todo/write 的真实待办）+ project；多会话按 **等待>错误>工作>思考>空闲** 优先级选最需要注意的；结果防抖 200ms 写 `pet.json#status`。SUCCESS/ERROR 是一次性 flash（壳侧消费后状态本身回 IDLE）。**无真实待办时不编造进度百分比**。
+- **状态机（主信号）**：Host 监听 DSH 标准 `session/event`（`{ global: true }`，事件类型 turn/start、assistant/message、tool/call、tool/result、todo/write、turn/end、session/disposed…），由 `lib/companion-reducer.js`（照抄 dsh-dafeiyu）归约为 IDLE/THINKING/WORKING/WAITING/SUCCESS/ERROR + stage/task/progress/project，输出 STATE/PULSE/TASK/TASKS 协议消息经 stdin 驱动 Helper；多会话按 **等待>错误>工作>思考>空闲** 优先级选择；STATE 消息同时镜像到 `pet.json#status`（设置卡片只读区）。**无真实待办时不编造进度百分比**。
 - **完成标记（兼容旧壳）**：`agent/status` 根会话（`parentSession == null`）running → idle 仍向 `~/.dsh/bigfish-completions.jsonl` 追加一行；**本壳（bigfish/main.js）已不再监视该文件**——完成庆祝由状态机 SUCCESS flash 驱动。
 - **主目录探测**：Host 的 `pickHome()` 在 `DSH_HOME` 与 `~/.dsh` 之间选有 `pet.json` 的那个，保证 DSH Desktop 与 Bigfish 共享状态。
 
-### 宠物窗口（bigfish/ 侧）
+### 宠物窗口（旧 bigfish/ 侧——已停用，以下约定仅作参考/回退用）
+
+> 新架构：宠物窗口由 `runtime/helper.py`（PySide6 透明窗口）渲染，**不再使用** Electron 的「不透明窗口 + setShape 剪影」方案——`bigfish/main.js` 的 `DISABLE_ELECTRON_PET = true` 已停用 Electron 桌宠。
 
 - **必须是不透明窗口**：这台目标机器不合成透明窗口、也不能改渲染配置（`disableHardwareAcceleration`/`disable-gpu-compositing`/`enable-transparent-visuals` 都会让主窗口卡死）。改动渲染开关前先记住这个限制。
 - **形状裁剪**：`main.js` 的 `applyPetShape()` 用 `PET_SHAPES[当前帧]` 的矩形 + `petWindow.setShape()` 裁剪；映射必须与渲染一致——**img 固定在方形盒子里（宽=高=size×0.98，`object-fit: contain`）**，形状按 contain 公式 `scale=min(box/帧宽, box/160)` + 居中偏移计算；矩形宽高 +1 扩张以消除取整缝隙。改动画帧/尺寸时两者必须同步改。
@@ -78,15 +80,15 @@ Bigfish 应用目录（壳侧同步目标）：`E:\AI\DSH\Bigfish\resources\app\
 
 ## 待办（大肥鱼有、我们暂未做的功能，后续实现）
 
-- [ ] **状态动作帧**（需要美术资源）：每状态专属帧——思考（合十）、工作（拿扫帚）、等待（抬手）、完成（微笑）、出错（生气）+ 空闲微动作（眨眼/观察）+ 程序化 motion（think 浮动 / work 抖动 / bounce 跳跃 / shake 抖动 / wait 轻晃）。帧就位后改 `FRAMES` 映射 + `STATUS_ANIMATION` + 呼吸微动作升级
-- [ ] **多任务状态列表**：≥2 个活跃会话时状态卡同时列出各任务（reducer 输出 TASKS → 多行状态卡）
-- [ ] **右键菜单增强**：调整大小 / 气泡大小 / 打开 WebUI / 本次隐藏 / 本次关闭
-- [ ] **「本次隐藏 / 本次关闭」**：只隐藏窗口不关插件 / 关闭 Helper 本次不再启动
-- [ ] **自带窗口宿主（一键安装）**：把壳侧窗口做成插件自带的独立 Helper（PySide6 或 Electron 宿主），彻底去掉壳侧整合步骤
+- [ ] **状态动作帧**（需要美术资源）：每状态专属帧——思考（合十）、工作（拿扫帚）、等待（抬手）、完成（微笑）、出错（生气）+ 空闲微动作（眨眼/观察）+ 程序化 motion（think 浮动 / work 抖动 / bounce 跳跃 / shake 抖动 / wait 轻晃）。帧就位后改 `assets/pet-manifest.json` 的 clips/stateMap/idleMicroClips（Helper 已支持全部机制）
+- [ ] **多任务状态列表**：≥2 个活跃会话时状态卡同时列出各任务（reducer 已输出 TASKS 消息，Helper 的 `_draw_multi_task_card` 已实现——验证接线即可）
+- [ ] **Helper 打包 exe**：PyInstaller 打包 `runtime/` → `runtime/bin/win32-x64/dsh-bigfishpet-helper.exe` 随插件分发（照抄 dsh-dafeiyu scripts/build-helper.ps1），去掉对用户 Python 环境的依赖
+- [ ] **「本次隐藏 / 本次关闭」**：Helper 右键菜单已有（本次隐藏/本次关闭），验证 CLOSED 消息与 Host 的 restartSuppressed 接线
 
 ## 注意事项
 
 - 仓库是 Git 项目；每次改动记得 `git add -A && git commit`。
-- 不要删除 `pet-shapes.json`（可从 `assets/pet/*.png` 重新生成，但别在运行时生成）。
-- 状态机 smoke test：临时脚本模拟 session/event 流验证 `lib/pet-status-reducer.js`（参考上次提交的 `.tmp-smoke.mjs` 写法：turn/start→assistant→tool/call→tool/result→todo/write→turn/end，断言状态/阶段/进度/优先级/flash）。
-- 完成庆祝由状态机 SUCCESS flash 驱动；壳侧不再监视 `bigfish-completions.jsonl`（插件仍写该文件兼容旧壳，测试时注意区分）。
+- **Helper 依赖 PySide6**（本机已装 6.11.2）；冒烟测试：`py -3 runtime/helper.py`（从插件目录跑，读 assets/pet-manifest.json），或 node 脚本 spawn 后发 hello/state 消息验证 READY。
+- 状态机 smoke test：临时脚本模拟 session/event 流验证 `lib/companion-reducer.js`（turn/start→assistant→tool/call→tool/result→todo/write→turn/end，断言状态/阶段/进度/优先级/消息输出）。
+- 完成庆祝由状态机 PULSE(SUCCESS) 驱动；`bigfish-completions.jsonl` 仅作旧壳兼容。
+- `bigfish/` 为旧 Electron 桌宠（已停用），改宠物显示相关代码先看 `runtime/helper.py` + `assets/pet-manifest.json`。

@@ -41,6 +41,10 @@ const APP_NAME = 'Bigfish';
 const HOST = '127.0.0.1';
 const READY_TIMEOUT_MS = 90 * 1000;
 
+// 桌宠已迁移到 Python/PySide6 Helper（插件自带，runtime/helper.py，透明窗口
+// 方案照抄 dsh-dafeiyu）——Electron 侧桌宠停用，避免双宠物。恢复：置 false。
+const DISABLE_ELECTRON_PET = true;
+
 // 检查更新：从 latest.json 读取最新版本（方法二，启动时查一次）
 const UPDATE_JSON_URL = 'https://raw.githubusercontent.com/turtle2209/Bigfish/main/latest.json';
 
@@ -1010,7 +1014,7 @@ if (!gotLock) {
 
     createTray();
     registerShortcuts();
-    startPetSync();
+    if (!DISABLE_ELECTRON_PET) startPetSync();
     setTimeout(checkForUpdates, 5000);
     if (settings.launchAtLogin) setAutoStart(true);
     if (!settings.onboardingDone) createWelcomeWindow();

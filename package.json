@@ -28,11 +28,16 @@
       "default": "./lib/index.js"
     },
     "./client": "./lib/client.js",
+    "./protocol": "./lib/protocol.js",
+    "./reducer": "./lib/companion-reducer.js",
+    "./helper-process": "./lib/helper-process.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
+    "runtime",
+    "assets",
     "cordis.patch.yml"
   ]
 }
