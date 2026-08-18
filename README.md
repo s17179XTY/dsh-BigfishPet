@@ -35,16 +35,18 @@ DeepSeek Harness 本身是 Web 后端 + 浏览器界面，**没有创建桌面�
 
 ### 第 1 步：安装插件（所有 DeepSeek Harness 环境通用）
 
-插件包是标准 DSH 插件（`dsh.bundle.patch` + `dsh.client` 声明），推荐用 `dsh plugin` 命令安装：
+插件包是标准 DSH 插件，推荐用 `dsh plugin` 命令安装（bundle 挂载）：
 
 ```bash
 # 在任意目录执行；profile 用你要装的目标环境（如 web）
 dsh plugin --profile web add github:s17179XTY/dsh-BigfishPet
 ```
 
-装完后**重启对应的 Harness 客户端**，设置里就会出现「桌宠」页。
+装完后**重启对应的 Harness 客户端**，设置里就会出现「桌宠」卡片。
 
-也可以手动复制 + 挂载（等价）：
+> ⚠️ **不要**再往 profile 的 `cordis.patch.yml` 里手动追加 `- insert: id: bigfish-pet`：插件通过 bundle 挂载后，**包内 `cordis.patch.yml` 会被自动应用**，重复 insert 会导致 DSH 启动崩溃（`duplicate loader entry id: bigfish-pet`）。插件包内 `cordis.patch.yml` 已改为**空 patch**。
+
+也可以手动复制 + 挂载（仅当目标环境不支持 `dsh plugin` 命令时）：
 
 ```powershell
 # 1) 克隆/下载本仓库，把插件部分复制进 profile 的 node_modules
@@ -52,49 +54,30 @@ $profile = "$HOME\.dsh\profiles\web"
 git clone https://github.com/s17179XTY/dsh-BigfishPet.git
 Copy-Item -Recurse dsh-BigfishPet "$profile\node_modules\bigfish-pet"
 
-# 2) 在 $HOME\.dsh\profiles\web\cordis.patch.yml 末尾追加：
+# 2) 若 profile 的 package.json 的 dsh.profile.bundles 没有 "bigfish-pet"，
+#    在 profile 级 cordis.patch.yml 末尾追加（不是包内文件）：
 # - insert:
 #     - id: bigfish-pet
 #       name: 'bigfish-pet'
 ```
 
-插件会创建/读取 `~/.dsh/pet.json`（宠物状态 + 状态机输出）与 `~/.dsh/bigfish-completions.jsonl`（完成标记，兼容旧壳）。
+插件会创建/读取 `~/.dsh/pet.json`（宠物状态 + 配置）与 `~/.dsh/bigfish-completions.jsonl`（完成标记，兼容旧壳）。
 
-### 第 2 步：壳侧整合（让宠物窗口出现，按你的壳选一种）
+### 第 2 步：不需要！宠物窗口由插件自带
 
-> **为什么需要这一步**：DeepSeek Harness 的 Web 后端不能创建窗口，宠物窗口由 Electron 壳的主进程创建，并从 `~/.dsh/pet.json` 读取显示配置。这一步就是把宠物窗口代码装进你的壳。
+**新架构（v0.4+）**：宠物窗口由插件自带的 **PySide6 Helper**（`runtime/helper.py`，透明窗口，照抄 [dsh-dafeiyu](https://github.com/QCYTSN/dsh-dafeiyu)）创建——插件 Host 启动时自动 spawn，**与壳无关**。装完插件、重启 DSH，桌面上就会出现透明窗口的鲸鱼娘（大圆角状态卡、状态图标、拖动、右键菜单）。**任何 DSH 环境（Bigfish / DSH Desktop / 纯 web profile）都一样，无需任何壳侧整合。**
 
-**方式 A——Bigfish 壳（现成整合，推荐）**：本仓库 `bigfish/` 目录提供完整文件，复制进 Bigfish 应用目录即可：
-
-```powershell
-# 目标：Bigfish 安装目录的 resources\app（按实际安装路径调整）
-$app = 'E:\AI\Bigfish\resources\app'
-Copy-Item bigfish\main.js bigfish\pet.html bigfish\pet.js bigfish\pet-preload.js bigfish\pet-shapes.json $app -Force
-Copy-Item -Recurse bigfish\assets\pet $app\assets\ -Force
-```
-
-重启 Bigfish。宠物按 `~/.dsh/pet.json` 显示（默认鲸鱼娘 / 160px / 右下角 / 可见）。
-
-**方式 B——其他 Electron 壳（如 DSH Desktop）做等价整合**：宠物窗口代码**不绑定 Bigfish**，只依赖标准 Electron 主进程 API 和一个文件（`~/.dsh/pet.json`，含状态机输出 `status`）。接入步骤：
-
-1. 把 `bigfish/` 里的宠物资源复制进壳的应用目录：`pet.html`、`pet.js`、`pet-preload.js`、`pet-shapes.json`、`assets/pet/`；
-2. 把 `bigfish/main.js` 中「Desktop pet」段（`createPetWindow` / `applyPetConfig` / `handlePetStatus` / `applyPetShape` / 鼠标方向走动等）以及 `pet-*` IPC 处理器并入该壳的 main 进程；
-3. 在壳启动后调用 `startPetSync()`（含状态轮询与光标方向检测），退出时调用 `stopPetSync()` / `destroyPetWindow()`；
-4. 注意沿用「不透明窗口 + `win.setShape()` 剪影」方案（透明窗口在部分系统不合成，渲染配置改动可能卡死主窗口）。
-
-> 说明：`bigfish/main.js` 基于 Bigfish 0.1.1（保留自动更新、失败重试、新手向导、托盘等功能），并已移除背景图注入（恢复 DSH 默认主题）与旧的目录 mtime 任务完成通知；原版可备份为 `main.js.stock-0.1.1`。详见 `bigfish/README.md`。
+> 旧架构的 `bigfish/`（Electron 不透明窗口 + setShape 剪影）已**停用**（`bigfish/main.js` 的 `DISABLE_ELECTRON_PET = true`），仅保留作参考/回退。Helper 依赖 Python + PySide6（`py -3 -c "import PySide6"`），正式发布将打包 exe 随插件分发（见 AGENTS.md 待办）。
 
 ## 为什么安装后看不到宠物？（FAQ）
 
-插件**只提供设置页与状态**，它跑在 DSH 的 Web 后端里，**不能创建窗口**。宠物窗口由**壳侧整合**创建——本仓库 `bigfish/main.js` 就是 Bigfish 壳的整合参考实现。所以：
-
 | 场景 | 结果 |
 | --- | --- |
-| 只装了插件（`dsh plugin` 命令，未做壳侧整合） | ✅ 设置里出现「桌宠」页；`pet.json` 正常读写；完成信号正常记录；⚠️ **没有宠物窗口**——预期行为，不是插件 bug |
-| 插件 + 壳侧整合（方式 A：Bigfish 现成文件） | ✅ 设置页 + 宠物窗口都出现 |
-| 插件 + 壳侧整合（方式 B：其他 Electron 壳等价整合） | ✅ 设置页 + 宠物窗口都出现 |
+| 装了插件（`dsh plugin` 命令）+ 重启 DSH | ✅ 设置卡片 + 透明宠物窗口都出现（Helper 随插件启动） |
+| 装了插件但没重启 | ⚠️ 重启前 Helper 未启动，没有宠物 |
+| 目标环境缺 Python/PySide6 | ⚠️ 宠物窗口不出现（Helper 起不来）；设置页正常。正式版打包 exe 后不再依赖 |
 
-排查顺序：① 壳侧整合是否已装入你的壳并重启（见「安装到 DeepSeek Harness（完整流程）」第 2 步）→ ② `~/.dsh/pet.json` 的 `display.visible` 是否为 `true` → ③ 客户端是否为支持 Electron 窗口的桌面壳（纯浏览器访问 web profile 无窗口能力，需要 Electron 壳）。
+排查顺序：① 重启 DSH → ② `~/.dsh/pet.json` 的 `display.visible` 是否为 `true` → ③ `py -3 -c "import PySide6"` 是否可用 → ④ 手动冒烟：在插件目录跑 `py -3 runtime/helper.py`（应出现宠物窗口）。
 
 ## 目录结构
 

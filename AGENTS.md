@@ -20,7 +20,7 @@ dsh-bigfishpet/
 ├── assets/
 │   ├── pet-manifest.json      # 动画清单（10 帧 → 状态映射；动作帧就位后升级）
 │   └── pet/*.png              # 鲸鱼娘动画帧（与 bigfish/assets/pet 同步）
-├── cordis.patch.yml           # 插件挂载行
+├── cordis.patch.yml           # 空 patch（[]）——bundle 挂载自动应用本文件，不可 insert，否则 duplicate 崩溃（见「⚠️ 安装与崩溃教训」）
 ├── package.json               # 插件包（dsh.bundle.patch + dsh.client；files 含 lib/runtime/assets）
 └── bigfish/                   # 旧 Electron 壳侧桌宠（已停用：main.js 的 DISABLE_ELECTRON_PET=true；保留作参考/回退）
 ```
@@ -29,6 +29,13 @@ dsh-bigfishpet/
 
 - **窗口由插件自带的 Helper 创建**（`runtime/helper.py`，PySide6 透明窗口）——任何 DSH 环境只要装了插件就会出宠物，**无需壳侧整合**（旧架构的「壳侧整合」已废弃，`bigfish/` 仅作参考）。
 - 排查「看不到宠物」：(1) 重启 DSH（插件启动时 spawn Helper）；(2) `~/.dsh/pet.json` 的 `display.visible` 是否为 `true`；(3) Python/PySide6 是否可用（`py -3 -c "import PySide6"`；正式版将打包 exe 随插件分发）；(4) Helper 冒烟测试：`py -3 runtime/helper.py`（需从插件目录跑，读 assets/pet-manifest.json）。
+
+## ⚠️ 安装与崩溃教训（必读）
+
+- **包内 `cordis.patch.yml` 必须保持空 patch（`[]`）**：插件通过 bundle 挂载（profile package.json 的 `dsh.profile.bundles` 含 "bigfish-pet"，或 `dsh plugin --profile web add github:s17179XTY/dsh-BigfishPet`）。**DSH 的 bundle 加载器会自动应用包内 cordis.patch.yml**——如果这里再 `- insert: id: bigfish-pet`，会与 bundle 的 loader entry 重复，**DSH 启动直接崩溃：`duplicate loader entry id: bigfish-pet`**（已在用户环境实际踩坑：重开后 crash、插件被移除）。
+- 手动复制安装（无 `dsh plugin` 命令的环境）：在 **profile 级** `cordis.patch.yml` 追加 insert，**不是包内文件**。
+- 用户环境曾 bundle 挂载 + 手动复制并存 → duplicate → 崩溃。**重装时二选一，不要并存**。
+- 改动 `cordis.patch.yml` / `package.json` 后必须重启 DSH 验证能正常启动，再验宠物。
 
 ## 关键约定（改代码前必读）
 
