@@ -43,6 +43,38 @@
       line-height: 1.35;
       white-space: normal;
       word-break: break-word;
+      padding-right: 26px; /* 给右侧状态图标留位 */
+    }
+    /* 状态图标（大肥鱼同款）：思考/工作=蓝三点、等待=黄感叹号、
+       完成=绿对勾、出错=红叉。圆形底色 + 白色图形。 */
+    #bubble-icon {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1;
+    }
+    #bubble-icon.show { display: flex; }
+    #bubble-icon.thinking, #bubble-icon.working { background: #2f81f7; }
+    #bubble-icon.waiting { background: #e8a13a; }
+    #bubble-icon.success { background: #2ea043; }
+    #bubble-icon.error { background: #f85149; }
+    #bubble-icon .dot {
+      display: inline-block;
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: #fff;
+      margin: 0 1px;
     }
     #pet {
       position: absolute;
@@ -60,7 +92,7 @@
   </style>
 </head>
 <body>
-  <div id="bubble"><span id="bubble-msg"></span><span id="bubble-detail"></span></div>
+  <div id="bubble"><span id="bubble-icon"></span><span id="bubble-msg"></span><span id="bubble-detail"></span></div>
   <img id="pet" src="assets/pet/idle.png" draggable="false" alt="" style="width: 157px; height: 157px">
   <script src="pet.js"></script>
 </body>

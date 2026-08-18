@@ -457,12 +457,11 @@ const DEFAULT_PET_STATE = {
 };
 
 // 活跃程度 → 空闲呼吸（渲染进程）+ 鼠标方向走动灵敏度（本进程）。
-// quiet：不呼吸、走动迟钝；normal：轻呼吸、标准灵敏；lively：快呼吸、很灵敏。
-// 灵敏度整体偏低：鼠标必须明显离开宠物一段距离才触发走动（用户反馈过快）。
+// 灵敏度整体偏低（用户反馈：太活跃）：走动死区大、检测间隔长。
 const ACTIVITY_SPEC = {
-  quiet: { deadzone: 250, interval: 2400 },
-  normal: { deadzone: 150, interval: 1200 },
-  lively: { deadzone: 90, interval: 600 },
+  quiet: { deadzone: 350, interval: 3000 },
+  normal: { deadzone: 250, interval: 2000 },
+  lively: { deadzone: 150, interval: 1000 },
 };
 
 function normalizeActivity(value) {
@@ -708,17 +707,22 @@ function applyPetConfig() {
   const { workAreaSize } = screen.getPrimaryDisplay();
   const size = Math.max(80, Math.min(280, Number(d.size) || 160));
   const w = size + 20;
-  const h = size + 40;
+  // 大肥鱼布局：窗口高度 = 角色 + 气泡（气泡在角色上方，互不遮挡）。
+  // 气泡高度由渲染进程上报（pet-bubble-show rect），气泡消失后收回。
+  const bubbleH = petBubbleRect && petWindow && !petWindow.isDestroyed() && petBubbleRect.height > 0
+    ? petBubbleRect.height + 14
+    : 0;
+  const h = size + 40 + bubbleH;
   const right = Math.max(0, Number(d.right) || 0);
   const bottom = Math.max(0, Number(d.bottom) || 0);
   const x = Math.max(0, workAreaSize.width - right - w);
   const y = Math.max(0, workAreaSize.height - bottom - h);
 
   const applied = petLastApplied;
-  if (!applied || applied.size !== size || applied.right !== right || applied.bottom !== bottom) {
+  if (!applied || applied.size !== size || applied.right !== right || applied.bottom !== bottom || applied.h !== h) {
     petWindow.setBounds({ x, y, width: w, height: h });
     petWindow.webContents.send('pet-size', Math.round(size));
-    petLastApplied = { size, right, bottom };
+    petLastApplied = { size, right, bottom, h };
     applyPetShape();
   }
 
@@ -1040,10 +1044,12 @@ if (!gotLock) {
   ipcMain.on('pet-bubble-show', (_e, rect) => {
     if (rect && typeof rect === 'object') petBubbleRect = rect;
     applyPetShape();
+    applyPetConfig(); // 窗口高度即时容纳气泡（大肥鱼布局：气泡在角色上方）
   });
   ipcMain.on('pet-bubble-hide', () => {
     petBubbleRect = null;
     applyPetShape();
+    applyPetConfig();
   });
   ipcMain.on('pet-log-error', (_e, msg) => {
     appendPetLog('[renderer] ' + msg);

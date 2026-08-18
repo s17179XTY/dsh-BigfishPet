@@ -24,11 +24,12 @@ const api = (window.petAPI && typeof window.petAPI === 'object') ? window.petAPI
 // Idle micro-motion (dsh-dafeiyu style): the pet stays still, and every so
 // often (randomized interval per activity level) does ONE visible breathing
 // pulse (opacity envelope 0→amp→0, ~2.5s). Opacity never changes the img
-// rect, so the setShape silhouette stays aligned.
+// rect, so the setShape silhouette stays aligned. Intervals are conservative
+// (user feedback: too lively).
 const BREATH = {
-  quiet: { interval: [15000, 25000], amp: 0 },
-  normal: { interval: [8000, 14000], amp: 0.15 },
-  lively: { interval: [4000, 8000], amp: 0.2 },
+  quiet: { interval: [20000, 35000], amp: 0 },
+  normal: { interval: [12000, 22000], amp: 0.15 },
+  lively: { interval: [6000, 12000], amp: 0.2 },
 };
 const BREATH_DURATION = 2500;
 
@@ -83,7 +84,8 @@ function setSize(px) {
   if (bubble) {
     bubble.style.fontSize = Math.max(9, Math.round(box / 13)) + 'px';
     bubble.style.maxWidth = Math.round(box * 1.05) + 'px';
-    bubble.style.padding = Math.max(4, Math.round(box * 0.045)) + 'px ' + Math.max(7, Math.round(box * 0.08)) + 'px';
+    // 右侧多留 30px 给状态图标（大肥鱼同款）
+    bubble.style.padding = Math.max(4, Math.round(box * 0.045)) + 'px ' + (Math.max(7, Math.round(box * 0.08)) + 30) + 'px';
     bubble.style.borderRadius = '10px'; // 圆角白卡；四角由 setShape 5 矩形逼近裁掉
   }
 }
@@ -111,13 +113,33 @@ if (img) {
   });
 }
 
-// Status card bubble: main message + detail line (project · progress · task),
-// driven by the DSH status machine. A left-click/say bubble temporarily
-// overlays it and then restores it.
+// Status card bubble: main message + detail line (project · progress · task)
+// + right-hand status icon, driven by the DSH status machine (dsh-dafeiyu
+// style). A left-click/say bubble temporarily overlays it, then restores it.
 let lastStatus = null;
 let sayTimer = null;
 
-function renderBubble(msg, detail) {
+function setStatusIcon(state) {
+  const icon = document.getElementById('bubble-icon');
+  if (!icon) return;
+  icon.className = '';
+  icon.textContent = '';
+  if (state === 'THINKING' || state === 'WORKING') {
+    icon.classList.add('show', 'thinking');
+    icon.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+  } else if (state === 'WAITING') {
+    icon.classList.add('show', 'waiting');
+    icon.textContent = '!';
+  } else if (state === 'SUCCESS') {
+    icon.classList.add('show', 'success');
+    icon.textContent = '✓';
+  } else if (state === 'ERROR') {
+    icon.classList.add('show', 'error');
+    icon.textContent = '✕';
+  }
+}
+
+function renderBubble(msg, detail, state) {
   if (!bubble) return;
   const msgEl = document.getElementById('bubble-msg');
   const detailEl = document.getElementById('bubble-detail');
@@ -126,6 +148,7 @@ function renderBubble(msg, detail) {
     detailEl.textContent = detail || '';
     detailEl.style.display = detail ? '' : 'none';
   }
+  setStatusIcon(state);
   bubble.classList.add('show');
   const report = () => {
     if (!api || !bubble || !bubble.classList.contains('show')) return;
@@ -145,12 +168,13 @@ function showStatusCard(status) {
   if (!status) return;
   lastStatus = status;
   if (sayTimer) { clearTimeout(sayTimer); sayTimer = null; }
-  renderBubble(status.message, status.detail);
+  renderBubble(status.message, status.detail, status.state);
 }
 
 function showBubble(text) {
-  // Temporary speech bubble; restore the status card after a few seconds.
-  renderBubble(text, '');
+  // Temporary speech bubble (no status icon); restore the status card after a
+  // few seconds.
+  renderBubble(text, '', null);
   if (sayTimer) clearTimeout(sayTimer);
   sayTimer = setTimeout(() => {
     sayTimer = null;
