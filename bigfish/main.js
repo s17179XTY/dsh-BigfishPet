@@ -453,6 +453,11 @@ const DEFAULT_PET_STATE = {
   display: { visible: true, size: 160, right: 24, bottom: 24 },
   notify: { complete: true },
   activity: 'normal',
+  bubbleScale: 1,
+  bubbleMode: 'always',
+  bubbleStates: ['THINKING', 'WORKING', 'WAITING', 'SUCCESS', 'ERROR'],
+  reducedMotion: false,
+  walkCooldownMin: 3,
   status: undefined,
 };
 
@@ -466,6 +471,11 @@ const ACTIVITY_SPEC = {
 
 function normalizeActivity(value) {
   return value === 'quiet' || value === 'lively' ? value : 'normal';
+}
+
+function normalizeBubbleStates(value) {
+  const allowed = new Set(['IDLE', 'THINKING', 'WORKING', 'WAITING', 'SUCCESS', 'ERROR']);
+  return Array.isArray(value) ? value.filter((v) => allowed.has(v)) : DEFAULT_PET_STATE.bubbleStates;
 }
 
 // Whale silhouette masks (PNG-native space) for the OS-level window region.
@@ -488,6 +498,11 @@ function readPetState() {
       display: { ...DEFAULT_PET_STATE.display, ...(parsed.display || {}) },
       notify: { ...DEFAULT_PET_STATE.notify, ...(parsed.notify || {}) },
       activity: normalizeActivity(parsed.activity),
+      bubbleScale: Math.max(0.8, Math.min(1.2, Number(parsed.bubbleScale) || 1)),
+      bubbleMode: parsed.bubbleMode === 'hidden' || parsed.bubbleMode === 'custom' ? parsed.bubbleMode : 'always',
+      bubbleStates: normalizeBubbleStates(parsed.bubbleStates),
+      reducedMotion: parsed.reducedMotion === true,
+      walkCooldownMin: Math.max(0, Math.min(30, Number(parsed.walkCooldownMin) || 3)),
       status: parsed.status || undefined,
     };
   } catch {
@@ -495,6 +510,7 @@ function readPetState() {
       ...DEFAULT_PET_STATE,
       display: { ...DEFAULT_PET_STATE.display },
       notify: { ...DEFAULT_PET_STATE.notify },
+      bubbleStates: [...DEFAULT_PET_STATE.bubbleStates],
     };
   }
 }
@@ -513,7 +529,7 @@ let eatTimer = null;
 let moveTimer = null;
 let petConfigTimer = null;
 let petCursorTimer = null;
-let petActivity = 'normal';
+let petConfigKey = null;
 let petLastApplied = null;
 let petCurrentFrame = 'idle.png';
 let petBubbleRect = null;
@@ -577,16 +593,16 @@ function setPetState(state) {
 }
 
 // Walk toward the cursor side: cursor left of the window → walk-left,
-// cursor right → walk-right. At most once per WALK_COOLDOWN_MS (user
-// requirement: at least 3 minutes between walks), so the pet mostly stays
-// still and other state animations (sleep etc.) are not drowned out.
-const WALK_COOLDOWN_MS = 3 * 60 * 1000;
+// cursor right → walk-right. Cooldown is configurable (walkCooldownMin,
+// default 3 minutes — user requirement "at least 3 min a walk"), so the pet
+// mostly stays still and other state animations (sleep etc.) are not drowned
+// out.
 let petLastWalkAt = 0;
 
 function doWander(dir) {
   if (!petWindow || petWindow.isDestroyed() || petState !== 'idle') return;
   const now = Date.now();
-  if (now - petLastWalkAt < WALK_COOLDOWN_MS) return;
+  if (now - petLastWalkAt < walkCooldownMs()) return;
   petLastWalkAt = now;
   const [x, y] = petWindow.getPosition();
   const { workAreaSize } = screen.getPrimaryDisplay();
@@ -615,9 +631,16 @@ function doWander(dir) {
 
 // Cursor-direction walk: while the pet is idle, walk toward the side the
 // mouse cursor is on (offset beyond a dead zone). Sensitivity follows the
-// activity level (deadzone + poll interval), so changing it restarts the timer.
+// activity level (deadzone + poll interval); cooldown follows the configurable
+// walkCooldownMin (0 = walking disabled, 3 min default per user request).
+function walkCooldownMs() {
+  const min = readPetState().walkCooldownMin;
+  return min <= 0 ? Infinity : min * 60 * 1000;
+}
+
 function startCursorWalk() {
   stopCursorWalk();
+  if (readPetState().reducedMotion) return; // 减少动态效果：不走动
   const spec = ACTIVITY_SPEC[petActivity] || ACTIVITY_SPEC.normal;
   petCursorTimer = setInterval(() => {
     if (!petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return;
@@ -736,13 +759,23 @@ function applyPetConfig() {
     applyPetShape();
   }
 
-  // 活跃程度：变化时推送渲染进程（呼吸动画）并重启走动检测（灵敏度）。
-  if (state.activity !== petActivity) {
-    petActivity = state.activity;
+  // 配置（活跃程度/气泡大小/气泡模式/减少动态）变化 → 推送渲染进程，
+  // 并按 reducedMotion / 走动冷却 启停走动检测。
+  const config = {
+    activity: state.activity,
+    bubbleScale: state.bubbleScale,
+    bubbleMode: state.bubbleMode,
+    bubbleStates: state.bubbleStates,
+    reducedMotion: state.reducedMotion,
+  };
+  const configKey = JSON.stringify(config);
+  if (configKey !== petConfigKey) {
+    petConfigKey = configKey;
     if (petWindow && !petWindow.isDestroyed()) {
-      petWindow.webContents.send('pet-activity', petActivity);
+      petWindow.webContents.send('pet-config', config);
     }
-    startCursorWalk();
+    if (state.reducedMotion || state.walkCooldownMin <= 0) stopCursorWalk();
+    else startCursorWalk();
   }
 
   // 状态机输出（思考/工作/等待/完成/出错 + 阶段/待办/进度）→ 状态卡与动画。

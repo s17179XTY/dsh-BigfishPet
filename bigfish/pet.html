@@ -16,18 +16,18 @@
       left: 50%;
       transform: translateX(-50%);
       box-sizing: border-box; /* max-width includes padding so the bubble never overflows the window */
-      /* 大肥鱼同款观感：近白白卡 + 浅灰细边框 + 圆角。无 box-shadow——
-         不透明窗口下阴影会落在深色背景上变成黑块。圆角四角由 setShape
-         的 5 矩形逼近裁剪（四角透桌面），不会露出深色背景。 */
+      /* dsh-dafeiyu 同款：大卡片（360px 级）、大圆角 30px、近白白卡 +
+         浅灰细边框。无 box-shadow（不透明窗口下阴影会落在深色背景上变成
+         黑块）。圆角四角由 setShape 5 矩形逼近裁剪（四角透桌面）。 */
       background: #fcfcfd;
       color: #25282d;
       border: 1px solid rgba(218, 221, 226, 0.9);
-      border-radius: 14px;
-      padding: 7px 13px;
-      font-size: 12px;
-      line-height: 1.4;
+      border-radius: 30px;
+      padding: 14px 20px;
+      font-size: 16px;
+      line-height: 1.5;
       width: max-content;
-      max-width: 168px;
+      max-width: 360px;
       white-space: normal;
       word-break: break-word;
       text-align: left;
@@ -37,44 +37,46 @@
     #bubble.show { display: block; animation: pop .18s ease-out; }
     #bubble-detail {
       display: block;
-      font-size: 10px;
+      font-size: 12px;
       color: #747981;
-      margin-top: 2px;
-      line-height: 1.35;
+      margin-top: 4px;
+      line-height: 1.45;
       white-space: normal;
       word-break: break-word;
-      padding-right: 26px; /* 给右侧状态图标留位 */
+      padding-right: 44px; /* 给右侧状态图标留位 */
     }
-    /* 状态图标（大肥鱼同款）：思考/工作=蓝三点、等待=黄感叹号、
-       完成=绿对勾、出错=红叉。圆形底色 + 白色图形。 */
+    /* 状态图标（dsh-dafeiyu 同款）：浅底 + 深色图形。
+       思考 #E2ECFF/#4C78E8 三点、工作 #DDEBFF/#3478F6 三点、
+       等待 #FFF0CE/#D88A00 感叹号、完成 #D9F7E4/#12B85A 对勾、
+       出错 #FDE3E3/#E5484D 红叉。 */
     #bubble-icon {
       position: absolute;
-      right: 10px;
+      right: 14px;
       top: 50%;
       transform: translateY(-50%);
-      width: 20px;
-      height: 20px;
+      width: 34px;
+      height: 34px;
       border-radius: 50%;
       display: none;
       align-items: center;
       justify-content: center;
-      font-size: 12px;
+      font-size: 16px;
       font-weight: 700;
-      color: #fff;
       line-height: 1;
     }
     #bubble-icon.show { display: flex; }
-    #bubble-icon.thinking, #bubble-icon.working { background: #2f81f7; }
-    #bubble-icon.waiting { background: #e8a13a; }
-    #bubble-icon.success { background: #2ea043; }
-    #bubble-icon.error { background: #f85149; }
+    #bubble-icon.thinking { background: #E2ECFF; color: #4C78E8; }
+    #bubble-icon.working { background: #DDEBFF; color: #3478F6; }
+    #bubble-icon.waiting { background: #FFF0CE; color: #D88A00; }
+    #bubble-icon.success { background: #D9F7E4; color: #12B85A; }
+    #bubble-icon.error { background: #FDE3E3; color: #E5484D; }
     #bubble-icon .dot {
       display: inline-block;
-      width: 3px;
-      height: 3px;
+      width: 5px;
+      height: 5px;
       border-radius: 50%;
-      background: #fff;
-      margin: 0 1px;
+      background: currentColor;
+      margin: 0 1.5px;
     }
     #pet {
       position: absolute;
