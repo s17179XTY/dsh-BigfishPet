@@ -20,7 +20,7 @@ dsh-bigfishpet/
 ├── assets/
 │   ├── pet-manifest.json      # 动画清单（10 帧 → 状态映射；动作帧就位后升级）
 │   └── pet/*.png              # 鲸鱼娘动画帧（与 bigfish/assets/pet 同步）
-├── cordis.patch.yml           # 空 patch（[]）——bundle 挂载自动应用本文件，不可 insert，否则 duplicate 崩溃（见「⚠️ 安装与崩溃教训」）
+├── cordis.patch.yml           # bundle insert（- insert: id: bigfish-pet）——bundle 加载器把它作为本插件的 loader entry（见「⚠️ 安装与崩溃教训」）
 ├── package.json               # 插件包（dsh.bundle.patch + dsh.client；files 含 lib/runtime/assets）
 └── bigfish/                   # 旧 Electron 壳侧桌宠（已停用：main.js 的 DISABLE_ELECTRON_PET=true；保留作参考/回退）
 ```
@@ -32,9 +32,9 @@ dsh-bigfishpet/
 
 ## ⚠️ 安装与崩溃教训（必读）
 
-- **包内 `cordis.patch.yml` 必须保持空 patch（`[]`）**：插件通过 bundle 挂载（profile package.json 的 `dsh.profile.bundles` 含 "bigfish-pet"，或 `dsh plugin --profile web add github:s17179XTY/dsh-BigfishPet`）。**DSH 的 bundle 加载器会自动应用包内 cordis.patch.yml**——如果这里再 `- insert: id: bigfish-pet`，会与 bundle 的 loader entry 重复，**DSH 启动直接崩溃：`duplicate loader entry id: bigfish-pet`**（已在用户环境实际踩坑：重开后 crash、插件被移除）。
-- 手动复制安装（无 `dsh plugin` 命令的环境）：在 **profile 级** `cordis.patch.yml` 追加 insert，**不是包内文件**。
-- 用户环境曾 bundle 挂载 + 手动复制并存 → duplicate → 崩溃。**重装时二选一，不要并存**。
+- **包内 `cordis.patch.yml` 保留 bundle insert（`- insert: - id: bigfish-pet`）**：插件通过 bundle 挂载（profile package.json 的 `dsh.profile.bundles` 含 "bigfish-pet"，或 `dsh plugin --profile web add github:s17179XTY/dsh-BigfishPet`）。**DSH 的 bundle 加载器把包内 cordis.patch.yml 作为该 bundle 的 patch 应用，`- insert` 里的 entry 就是插件的 loader entry**（与 dsh-mobile 同款写法）——空 patch（`[]`）会导致 bundle 挂载成功但没有任何 entry，插件不启动（已实测：dump-config 里看不到 bigfish-pet）。
+- **duplicate 崩溃的真实根因**：bundle 挂载 + **profile 级** cordis.patch.yml 手动 insert **并存**时，同一 entry 被应用两次 → `duplicate loader entry id: bigfish-pet`（用户环境实际踩坑：重开后 crash、插件被移除）。所以**两种方式二选一**：bundle 挂载用包内 insert；手动复制安装（无 `dsh plugin` 命令）才在 profile 级 cordis.patch.yml 追加 insert，并把包内改为空 `[]`。
+- 手动复制安装（无 `dsh plugin` 命令的环境）：在 **profile 级** `cordis.patch.yml` 追加 insert，**不是包内文件**（此时包内 cordis.patch.yml 应为空 `[]`，避免与 profile 级重复）。
 - 改动 `cordis.patch.yml` / `package.json` 后必须重启 DSH 验证能正常启动，再验宠物。
 
 ## 关键约定（改代码前必读）

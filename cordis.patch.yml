@@ -1,13 +1,17 @@
-# bigfish-pet — 本文件必须是空 patch！
+# bigfish-pet — bundle 挂载的 loader entry（与 dsh-mobile 同款写法）。
 #
-# 插件通过 bundle 机制挂载（profile package.json 的 dsh.profile.bundles 包含
-# "bigfish-pet"，或用 `dsh plugin --profile web add github:s17179XTY/dsh-BigfishPet`
-# 安装）。DSH 的 bundle 加载器会**自动应用**本文件作为该 bundle 的 patch——
-# 如果这里再 `- insert: id: bigfish-pet`，就会与 bundle 自身的 loader entry
-# 重复，启动报 "duplicate loader entry id: bigfish-pet" 并崩溃（已踩坑）。
+# DSH 的 bundle 加载器会把本文件作为该 bundle 的 patch 应用：`- insert` 里的
+# entry 就是插件的 loader entry（Host 在 lib/index.js）。空 patch（[]）会导致
+# bundle 挂载成功但没有任何 entry —— 插件被加载器解析却不会启动。
 #
-# 手动复制安装的用户：在 profile 的 cordis.patch.yml（不是本文件）里添加：
-#   - insert:
-#       - id: bigfish-pet
-#         name: 'bigfish-pet'
-[]
+# ⚠️ duplicate 崩溃的真实教训（不是本文件）：
+#   崩溃发生在「bundle 挂载 + profile 级手动 insert」并存时 —— bundle 层应用
+#   本文件的 insert，profile 级 cordis.patch.yml 又 insert 一次同 id，启动报
+#   "duplicate loader entry id: bigfish-pet"。
+#   因此：用 `dsh plugin --profile web add github:s17179XTY/dsh-BigfishPet`
+#   （或 bundles 数组挂载）时，包内保留本 insert；手动复制安装（无 dsh plugin
+#   命令）时，才在 profile 级 cordis.patch.yml 追加 insert，并把包内改为空 []。
+#   两种方式二选一，不要并存。
+- insert:
+    - id: bigfish-pet
+      name: bigfish-pet

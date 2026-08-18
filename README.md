@@ -44,7 +44,7 @@ dsh plugin --profile web add github:s17179XTY/dsh-BigfishPet
 
 装完后**重启对应的 Harness 客户端**，设置里就会出现「桌宠」卡片。
 
-> ⚠️ **不要**再往 profile 的 `cordis.patch.yml` 里手动追加 `- insert: id: bigfish-pet`：插件通过 bundle 挂载后，**包内 `cordis.patch.yml` 会被自动应用**，重复 insert 会导致 DSH 启动崩溃（`duplicate loader entry id: bigfish-pet`）。插件包内 `cordis.patch.yml` 已改为**空 patch**。
+> ⚠️ **不要再往 profile 的 `cordis.patch.yml` 里手动追加 `- insert: id: bigfish-pet`**（前提是插件已通过 bundle 挂载）：bundle 挂载 + profile 级手动 insert **并存**时，同一 entry 被应用两次，DSH 启动崩溃（`duplicate loader entry id: bigfish-pet`）。用 `dsh plugin add`（bundle 挂载）时，**包内 `cordis.patch.yml` 自带 `- insert` 就是插件的 loader entry**，profile 级不需要再写。
 
 也可以手动复制 + 挂载（仅当目标环境不支持 `dsh plugin` 命令时）：
 
@@ -55,7 +55,8 @@ git clone https://github.com/s17179XTY/dsh-BigfishPet.git
 Copy-Item -Recurse dsh-BigfishPet "$profile\node_modules\bigfish-pet"
 
 # 2) 若 profile 的 package.json 的 dsh.profile.bundles 没有 "bigfish-pet"，
-#    在 profile 级 cordis.patch.yml 末尾追加（不是包内文件）：
+#    在 profile 级 cordis.patch.yml 末尾追加（不是包内文件），并把包内
+#    cordis.patch.yml 改为空 []（避免重复 insert）：
 # - insert:
 #     - id: bigfish-pet
 #       name: 'bigfish-pet'
