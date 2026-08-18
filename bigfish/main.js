@@ -577,9 +577,17 @@ function setPetState(state) {
 }
 
 // Walk toward the cursor side: cursor left of the window → walk-left,
-// cursor right → walk-right (replaces the old random wander).
+// cursor right → walk-right. At most once per WALK_COOLDOWN_MS (user
+// requirement: at least 3 minutes between walks), so the pet mostly stays
+// still and other state animations (sleep etc.) are not drowned out.
+const WALK_COOLDOWN_MS = 3 * 60 * 1000;
+let petLastWalkAt = 0;
+
 function doWander(dir) {
   if (!petWindow || petWindow.isDestroyed() || petState !== 'idle') return;
+  const now = Date.now();
+  if (now - petLastWalkAt < WALK_COOLDOWN_MS) return;
+  petLastWalkAt = now;
   const [x, y] = petWindow.getPosition();
   const { workAreaSize } = screen.getPrimaryDisplay();
   const distance = 100 + Math.random() * 180;
@@ -596,9 +604,11 @@ function doWander(dir) {
     if (t >= 1) {
       clearInterval(moveTimer);
       moveTimer = null;
+      // 走完强制重放真实状态动画（sleep 等）：handlePetStatus 的 key 去重
+      // 会跳过重复状态，必须 force。
+      const s = readPetState();
       setPetState('idle');
-      // 走完按 pet.json 恢复真实状态（可能已变成 sleep 等）
-      applyPetConfig();
+      handlePetStatus(s.status, s.notify?.complete !== false, true);
     }
   }, 16);
 }
@@ -651,7 +661,7 @@ const STATUS_ANIMATION = {
   ERROR: 'idle',
 };
 
-function handlePetStatus(status, notifyComplete) {
+function handlePetStatus(status, notifyComplete, force = false) {
   const key = [
     status?.sessionId ?? '',
     status?.state ?? '',
@@ -662,7 +672,7 @@ function handlePetStatus(status, notifyComplete) {
     status?.progress?.total ?? '',
     status?.flash ?? '',
   ].join('|');
-  if (key === petLastStatusKey) return;
+  if (!force && key === petLastStatusKey) return;
   petLastStatusKey = key;
 
   if (petWindow && !petWindow.isDestroyed()) {

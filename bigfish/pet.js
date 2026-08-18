@@ -86,7 +86,7 @@ function setSize(px) {
     bubble.style.maxWidth = Math.round(box * 1.05) + 'px';
     // 右侧多留 30px 给状态图标（大肥鱼同款）
     bubble.style.padding = Math.max(4, Math.round(box * 0.045)) + 'px ' + (Math.max(7, Math.round(box * 0.08)) + 30) + 'px';
-    bubble.style.borderRadius = '10px'; // 圆角白卡；四角由 setShape 5 矩形逼近裁掉
+    bubble.style.borderRadius = '14px'; // 圆角白卡；四角由 setShape 5 矩形逼近裁掉
   }
 }
 
@@ -155,7 +155,7 @@ function renderBubble(msg, detail, state) {
     const r = bubble.getBoundingClientRect();
     // radius lets the main process approximate the rounded corners with a
     // 5-rect setShape mask (corners fall outside the mask → desktop shows).
-    api.bubbleShow({ x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height), radius: 10 });
+    api.bubbleShow({ x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height), radius: 14 });
   };
   report();
   // Re-report while visible so the setShape mask always covers the CURRENT
