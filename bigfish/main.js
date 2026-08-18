@@ -574,6 +574,16 @@ function createPetWindow() {
     appendPetLog('[did-finish-load]');
     const size = petLastApplied ? petLastApplied.size : 160;
     petWindow.webContents.send('pet-size', Math.round(size));
+    // 页面加载完成前 send 的消息会丢失（首次启动的 pet-config 就是），
+    // 这里强制重发当前配置，否则 bubbleMode/bubbleScale/activity 不生效。
+    const s = readPetState();
+    petWindow.webContents.send('pet-config', {
+      activity: s.activity,
+      bubbleScale: s.bubbleScale,
+      bubbleMode: s.bubbleMode,
+      bubbleStates: s.bubbleStates,
+      reducedMotion: s.reducedMotion,
+    });
     applyPetShape();
   });
   petWindow.on('closed', () => { petWindow = null; });
@@ -739,12 +749,15 @@ function applyPetConfig() {
 
   const { workAreaSize } = screen.getPrimaryDisplay();
   const size = Math.max(80, Math.min(280, Number(d.size) || 160));
-  const w = size + 20;
-  // 大肥鱼布局：窗口高度 = 角色 + 气泡（气泡在角色上方，互不遮挡）。
-  // 气泡高度由渲染进程上报（pet-bubble-show rect），气泡消失后收回。
+  // dsh-dafeiyu 布局：窗口 = max(角色, 气泡+边距) 宽 × (角色+气泡) 高，
+  // 气泡（max 360×bubbleScale）完整显示、不遮挡宠物。
+  const bubbleW = petBubbleRect && petWindow && !petWindow.isDestroyed() && petBubbleRect.width > 0
+    ? petBubbleRect.width
+    : 0;
   const bubbleH = petBubbleRect && petWindow && !petWindow.isDestroyed() && petBubbleRect.height > 0
     ? petBubbleRect.height + 14
     : 0;
+  const w = Math.max(size + 20, bubbleW + 28);
   const h = size + 40 + bubbleH;
   const right = Math.max(0, Number(d.right) || 0);
   const bottom = Math.max(0, Number(d.bottom) || 0);
@@ -752,10 +765,10 @@ function applyPetConfig() {
   const y = Math.max(0, workAreaSize.height - bottom - h);
 
   const applied = petLastApplied;
-  if (!applied || applied.size !== size || applied.right !== right || applied.bottom !== bottom || applied.h !== h) {
+  if (!applied || applied.size !== size || applied.right !== right || applied.bottom !== bottom || applied.w !== w || applied.h !== h) {
     petWindow.setBounds({ x, y, width: w, height: h });
     petWindow.webContents.send('pet-size', Math.round(size));
-    petLastApplied = { size, right, bottom, h };
+    petLastApplied = { size, right, bottom, w, h };
     applyPetShape();
   }
 
