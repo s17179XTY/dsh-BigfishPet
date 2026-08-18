@@ -458,10 +458,11 @@ const DEFAULT_PET_STATE = {
 
 // 活跃程度 → 空闲呼吸（渲染进程）+ 鼠标方向走动灵敏度（本进程）。
 // quiet：不呼吸、走动迟钝；normal：轻呼吸、标准灵敏；lively：快呼吸、很灵敏。
+// 灵敏度整体偏低：鼠标必须明显离开宠物一段距离才触发走动（用户反馈过快）。
 const ACTIVITY_SPEC = {
-  quiet: { deadzone: 120, interval: 1200 },
-  normal: { deadzone: 70, interval: 600 },
-  lively: { deadzone: 40, interval: 300 },
+  quiet: { deadzone: 250, interval: 2400 },
+  normal: { deadzone: 150, interval: 1200 },
+  lively: { deadzone: 90, interval: 600 },
 };
 
 function normalizeActivity(value) {
@@ -775,7 +776,25 @@ function applyPetShape() {
       const h = Math.max(1, Math.round(r[3] * scale) + 1);
       out.push({ x, y, width: w, height: h });
     }
-    if (petBubbleRect) out.push(petBubbleRect);
+    // Bubble: approximate the rounded card with 5 rects (center + 4 edge
+    // strips). The four corners fall OUTSIDE the mask, so the desktop shows
+    // through them — a clean rounded look without dark corners, despite the
+    // opaque window (no transparent compositing on this machine).
+    if (petBubbleRect) {
+      const { x, y, width, height, radius = 10 } = petBubbleRect;
+      const r = Math.max(1, Math.min(Math.round(radius), Math.floor(width / 2), Math.floor(height / 2)));
+      const innerW = width - 2 * r;
+      const innerH = height - 2 * r;
+      out.push({ x: x + r, y, width: innerW, height });                       // center
+      if (innerW > 0) {
+        out.push({ x: x + r, y, width: innerW, height: r });                   // top strip
+        out.push({ x: x + r, y: y + height - r, width: innerW, height: r });   // bottom strip
+      }
+      if (innerH > 0) {
+        out.push({ x, y: y + r, width: r, height: innerH });                   // left strip
+        out.push({ x: x + width - r, y: y + r, width: r, height: innerH });    // right strip
+      }
+    }
     petWindow.setShape(out);
   } catch (err) {
     appendPetLog('[setShape failed] ' + (err && err.message));

@@ -16,19 +16,21 @@
       left: 50%;
       transform: translateX(-50%);
       box-sizing: border-box; /* max-width includes padding so the bubble never overflows the window */
-      background: #fff;
-      color: #333;
-      padding: 6px 11px;
-      /* 不透明窗口 + setShape 裁剪下，圆角四角会露出深色窗口背景（黑边感），
-         阴影更会沿裁剪线留下深色残留——所以用方形白卡、无阴影。 */
-      border-radius: 3px;
+      /* 大肥鱼同款观感：近白白卡 + 浅灰细边框 + 圆角。无 box-shadow——
+         不透明窗口下阴影会落在深色背景上变成黑块。圆角四角由 setShape
+         的 5 矩形逼近裁剪（四角透桌面），不会露出深色背景。 */
+      background: #fcfcfd;
+      color: #25282d;
+      border: 1px solid rgba(218, 221, 226, 0.9);
+      border-radius: 10px;
+      padding: 7px 13px;
       font-size: 12px;
       line-height: 1.4;
       width: max-content;
       max-width: 168px;
       white-space: normal;
       word-break: break-word;
-      text-align: center;
+      text-align: left;
       display: none;
       z-index: 2;
     }
@@ -36,7 +38,7 @@
     #bubble-detail {
       display: block;
       font-size: 10px;
-      opacity: 0.65;
+      color: #747981;
       margin-top: 2px;
       line-height: 1.35;
       white-space: normal;

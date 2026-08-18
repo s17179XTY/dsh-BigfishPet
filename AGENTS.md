@@ -43,11 +43,12 @@ dsh-bigfishpet/
 
 - **必须是不透明窗口**：这台目标机器不合成透明窗口、也不能改渲染配置（`disableHardwareAcceleration`/`disable-gpu-compositing`/`enable-transparent-visuals` 都会让主窗口卡死）。改动渲染开关前先记住这个限制。
 - **形状裁剪**：`main.js` 的 `applyPetShape()` 用 `PET_SHAPES[当前帧]` 的矩形 + `petWindow.setShape()` 裁剪；映射必须与渲染一致——**img 固定在方形盒子里（宽=高=size×0.98，`object-fit: contain`）**，形状按 contain 公式 `scale=min(box/帧宽, box/160)` + 居中偏移计算；矩形宽高 +1 扩张以消除取整缝隙。改动画帧/尺寸时两者必须同步改。
-- **气泡**：`pet.js` 显示气泡期间每 200ms 上报 `getBoundingClientRect`（`pet-bubble-show` IPC），main.js 并入形状；气泡 CSS 必须 `box-sizing: border-box`（否则 max-width 不含 padding，会溢出窗口被裁剪——已踩过坑）。**必须方形白卡（border-radius ≤3px）、无 box-shadow**：不透明窗口 + setShape 裁剪下，大圆角四角会露出深色窗口背景、阴影沿裁剪线留黑边（已踩过坑）。
+- **气泡**：`pet.js` 显示气泡期间每 200ms 上报 `getBoundingClientRect` + radius（`pet-bubble-show` IPC），main.js 并入形状；气泡 CSS 必须 `box-sizing: border-box`（否则 max-width 不含 padding，会溢出窗口被裁剪——已踩过坑）。**大肥鱼同款观感**：近白白卡 `#fcfcfd` + 浅灰细边框 `rgba(218,221,226,.9)` + 圆角 10px + 左对齐（标题 `#25282d` / detail `#747981`），**无 box-shadow**（不透明窗口下阴影会落在深色背景上变成黑块）。圆角四角由 setShape **5 矩形逼近**（中心 + 上下左右边条，四角落在裁剪区外 → 透桌面 → 干净圆角，无黑角）。
+- **轮廓数据（pet-shapes.json）**：由 `scripts/gen-shapes.ps1` 从 `assets/pet/*.png` 生成——**坐标在高归一化到 160 的空间**（`meta.w = 原宽×160/原高`，与 applyPetShape 的 contain 公式 `scale=min(box/meta.w, box/160)` 严格对应）；阈值 alpha>200（PNG alpha 是二值的，128/200 结果相同）。**教训：Bitmap.Width 会被 PNG DPI 元数据缩放，必须从 IHDR 读原始尺寸；原 shapes 的 idle w=160 与当前 idle.png（160×168）不匹配，导致 idle 帧裁剪错位、角色周围露深色背景（黑边）——重新生成后 idle w=152。改了动画帧后必须重新生成并核对各帧 meta.w。**
 - **交互**：左键=说话+吃；右键=`toggleMainWindowMinimize()`（最小化到任务栏/打开，不隐藏到托盘）；拖动后 `pet-drag-end` 回写 `pet.json`。
 - **状态驱动**：无随机说话/睡觉/散步。动画由 `pet.json#status` 映射（`STATUS_ANIMATION`：THINKING/WORKING→idle、WAITING→sleep、SUCCESS→eat 庆祝、ERROR→提示气泡），flash SUCCESS 时受 `notify.complete` 控制；状态卡气泡**常驻**（主文案 + detail 行：`项目 · 已完成 x/y 步 · 当前待办`），左键说话气泡 3 秒后自动恢复状态卡。
-- **鼠标方向走动**：`startCursorWalk()` 按 `ACTIVITY_SPEC[activity]` 的间隔（600ms）比较光标与窗口中心（`screen.getCursorScreenPoint()`）：光标在左→`doWander('left')`（walk-left），在右→walk-right；仅 idle 时响应，偏移 <死区（默认 70px）不响应；走动结束 `applyPetConfig()` 恢复真实状态。
-- **活跃程度**（`pet.json#activity`：quiet/normal/lively）：控制空闲**呼吸动画**（pet.js 的 opacity 脉动，quiet 无呼吸；只改透明度不改 rect，形状不错位）与走动灵敏度（死区 120/70/40px、检测间隔 1200/600/300ms）；变化时 `pet-activity` IPC 推送渲染进程并重启走动检测。
+- **鼠标方向走动**：`startCursorWalk()` 按 `ACTIVITY_SPEC[activity]` 的间隔（默认 1200ms）比较光标与窗口中心（`screen.getCursorScreenPoint()`）：光标在左→`doWander('left')`（walk-left），在右→walk-right；仅 idle 时响应，偏移 <死区（默认 150px）不响应；走动结束 `applyPetConfig()` 恢复真实状态。
+- **活跃程度**（`pet.json#activity`：quiet/normal/lively）：**间歇式空闲微动作**（大肥鱼同款时间尺度，pet.js 的 `scheduleBreath()`）——大部分时间静止，每隔 安静 15–25s / 标准 8–14s / 活泼 4–8s 随机间隔做一次 ~2.5s 的呼吸脉动（opacity 包络 0→15/20%→0，肉眼可见；quiet 无呼吸；只改透明度不改 rect，形状不错位）；走动灵敏度 死区 250/150/90px、检测间隔 2400/1200/600ms；变化时 `pet-activity` IPC 推送渲染进程并重启走动检测。
 - **渲染日志**：`appendPetLog` 写到 Bigfish userData 的 `pet-render.log`，排查显示问题先看它。
 
 ### 插件设置页（lib/client.js）
@@ -67,13 +68,25 @@ $node = 'E:\AI\DSH Desktop\resources\app\node_modules\node\bin\node.exe'
 & $node --check D:\AI\DSH\dsh-bigfishpet\bigfish\pet.js
 
 # 轮廓数据（pet-shapes.json）是从 PNG 生成的；改了动画帧后要重新生成
-# 生成脚本：按 alpha>128 逐行扫描 + 纵向合并矩形，输出 {frame: {w, rects}}
+& .\scripts\gen-shapes.ps1   # 高归一化到 160 空间、alpha>200、IHDR 原始尺寸
 ```
 
 插件安装路径（同步目标）：`C:\Users\Administrator\.dsh\profiles\web\node_modules\bigfish-pet\`
 Bigfish 应用目录（壳侧同步目标）：`E:\AI\DSH\Bigfish\resources\app\`（注意：不是 `E:\AI\Bigfish`）
 
 改完插件 Host/Client 后要同步到已安装插件；改完壳侧文件后要同步到 `resources\app` 并重启 Bigfish 生效。
+
+## 待办（大肥鱼有、我们暂未做的功能，后续实现）
+
+- [ ] **气泡模式**：常驻显示 / 完全隐藏 / 自定义哪些状态显示气泡（`bubbleMode` / `bubbleStates`，大肥鱼 `_bubble_visible` 逻辑）
+- [ ] **气泡大小**：80%–120% 滑块（`bubbleScale`）
+- [ ] **减少动态效果**：减少走动、循环帧与程序化晃动（`reducedMotion`）
+- [ ] **响应子 Agent**：允许子 Agent 状态参与优先级选择（默认关闭；reducer 已支持 `includeSubagents` 参数，只差设置项接线）
+- [ ] **多任务状态列表**：≥2 个活跃会话时状态卡同时列出各任务（`TASKS` 消息 → 多行状态卡）
+- [ ] **状态图标**：气泡卡右侧的状态图标（思考三点 / 等待感叹号 / 完成对勾 / 错误红叉）
+- [ ] **右键菜单增强**：调整大小 / 气泡大小 / 打开 WebUI / 本次隐藏 / 本次关闭
+- [ ] **「本次隐藏 / 本次关闭」**：只隐藏窗口不关插件 / 关闭 Helper 本次不再启动
+- [ ] **自带窗口宿主（一键安装）**：把壳侧窗口做成插件自带的独立 Helper（PySide6 或 Electron 宿主），彻底去掉壳侧整合步骤
 
 ## 注意事项
 

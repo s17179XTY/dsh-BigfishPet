@@ -17,35 +17,52 @@ let animTimer = null;
 let petSize = 160;
 let activity = 'normal';
 let breathTimer = null;
+let breathAnimTimer = null;
 
 const api = (window.petAPI && typeof window.petAPI === 'object') ? window.petAPI : null;
 
+// Idle micro-motion (dsh-dafeiyu style): the pet stays still, and every so
+// often (randomized interval per activity level) does ONE visible breathing
+// pulse (opacity envelope 0→amp→0, ~2.5s). Opacity never changes the img
+// rect, so the setShape silhouette stays aligned.
 const BREATH = {
-  quiet: { period: 0, amp: 0 },
-  normal: { period: 4200, amp: 0.06 },
-  lively: { period: 2200, amp: 0.11 },
+  quiet: { interval: [15000, 25000], amp: 0 },
+  normal: { interval: [8000, 14000], amp: 0.15 },
+  lively: { interval: [4000, 8000], amp: 0.2 },
 };
+const BREATH_DURATION = 2500;
 
-// Breathing: a subtle opacity pulse while idle (like blinking/observing).
-// Opacity never changes the img rect, so the setShape silhouette stays aligned.
-function startBreath() {
+function stopBreath() {
+  if (breathTimer) { clearTimeout(breathTimer); breathTimer = null; }
+  if (breathAnimTimer) { clearInterval(breathAnimTimer); breathAnimTimer = null; }
+  if (img) img.style.opacity = '1';
+}
+
+function scheduleBreath() {
   stopBreath();
   const spec = BREATH[activity] || BREATH.normal;
-  if (!spec.period || !img) return;
-  const started = Date.now();
-  breathTimer = setInterval(() => {
-    const t = (Date.now() - started) / spec.period;
-    img.style.opacity = String(Math.max(0.5, 1 - spec.amp * (0.5 + 0.5 * Math.sin(2 * Math.PI * t))));
-  }, 120);
-}
-function stopBreath() {
-  if (breathTimer) { clearInterval(breathTimer); breathTimer = null; }
-  if (img) img.style.opacity = '1';
+  if (!spec.amp || !img) return;
+  const [lo, hi] = spec.interval;
+  breathTimer = setTimeout(() => {
+    breathTimer = null;
+    if (state !== 'idle') { scheduleBreath(); return; }
+    const started = Date.now();
+    breathAnimTimer = setInterval(() => {
+      const t = (Date.now() - started) / BREATH_DURATION;
+      if (t >= 1) {
+        stopBreath();
+        scheduleBreath();
+        return;
+      }
+      const env = Math.sin(Math.PI * t); // 0 → 1 → 0 envelope
+      img.style.opacity = String(Math.max(0.5, 1 - spec.amp * env));
+    }, 50);
+  }, lo + Math.random() * (hi - lo));
 }
 
 function setActivity(value) {
   activity = value === 'quiet' || value === 'lively' ? value : 'normal';
-  if (state === 'idle') startBreath();
+  if (state === 'idle') scheduleBreath();
 }
 
 function currentFrame() {
@@ -67,7 +84,7 @@ function setSize(px) {
     bubble.style.fontSize = Math.max(9, Math.round(box / 13)) + 'px';
     bubble.style.maxWidth = Math.round(box * 1.05) + 'px';
     bubble.style.padding = Math.max(4, Math.round(box * 0.045)) + 'px ' + Math.max(7, Math.round(box * 0.08)) + 'px';
-    bubble.style.borderRadius = '3px'; // 方形白卡：圆角大会在裁剪下露出深色背景
+    bubble.style.borderRadius = '10px'; // 圆角白卡；四角由 setShape 5 矩形逼近裁掉
   }
 }
 
@@ -76,7 +93,7 @@ function setState(s) {
   state = s;
   frameIndex = 0;
   if (animTimer) { clearInterval(animTimer); animTimer = null; }
-  if (s === 'idle') startBreath(); else stopBreath();
+  if (s === 'idle') scheduleBreath(); else stopBreath();
   if (img) img.src = 'assets/pet/' + currentFrame();
   if (api) api.setFrame(currentFrame());
   if (FRAMES[s].length > 1 && FRAME_MS[s] > 0) {
@@ -113,7 +130,9 @@ function renderBubble(msg, detail) {
   const report = () => {
     if (!api || !bubble || !bubble.classList.contains('show')) return;
     const r = bubble.getBoundingClientRect();
-    api.bubbleShow({ x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) });
+    // radius lets the main process approximate the rounded corners with a
+    // 5-rect setShape mask (corners fall outside the mask → desktop shows).
+    api.bubbleShow({ x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height), radius: 10 });
   };
   report();
   // Re-report while visible so the setShape mask always covers the CURRENT
