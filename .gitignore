@@ -23,6 +23,10 @@ dist/
 out/
 *.tgz
 
+# PyInstaller helper build artifacts (exe is a build product; regenerate with scripts/build-helper.ps1)
+.build/
+runtime/bin/
+
 # Vision toolkit scratch
 .dsh-vision-toolkit/
 

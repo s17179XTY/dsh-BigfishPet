@@ -88,9 +88,9 @@ Bigfish 应用目录（壳侧同步目标）：`E:\AI\DSH\Bigfish\resources\app\
 ## 待办（大肥鱼有、我们暂未做的功能，后续实现）
 
 - [ ] **状态动作帧**（需要美术资源）：每状态专属帧——思考（合十）、工作（拿扫帚）、等待（抬手）、完成（微笑）、出错（生气）+ 空闲微动作（眨眼/观察）+ 程序化 motion（think 浮动 / work 抖动 / bounce 跳跃 / shake 抖动 / wait 轻晃）。帧就位后改 `assets/pet-manifest.json` 的 clips/stateMap/idleMicroClips（Helper 已支持全部机制）
-- [ ] **多任务状态列表**：≥2 个活跃会话时状态卡同时列出各任务（reducer 已输出 TASKS 消息，Helper 的 `_draw_multi_task_card` 已实现——验证接线即可）
-- [ ] **Helper 打包 exe**：PyInstaller 打包 `runtime/` → `runtime/bin/win32-x64/dsh-bigfishpet-helper.exe` 随插件分发（照抄 dsh-dafeiyu scripts/build-helper.ps1），去掉对用户 Python 环境的依赖
-- [ ] **「本次隐藏 / 本次关闭」**：Helper 右键菜单已有（本次隐藏/本次关闭），验证 CLOSED 消息与 Host 的 restartSuppressed 接线
+- [x] **多任务状态列表**：≥2 个活跃会话时状态卡同时列出各任务（reducer 输出 TASKS 消息，Helper 的 `_draw_multi_task_card` 已实现，接线已验证：smoke test 覆盖 TASKS 输出/优先级/dispose 清空）
+- [x] **Helper 打包 exe**：`scripts/build-helper.ps1`（PyInstaller onefile + console，--add-data assets）→ `runtime/bin/win32-x64/dsh-bigfishpet-helper.exe`（已打包验证 headless + visual 双冒烟通过；exe 是构建产物，已 gitignore，分发前重新构建）。**必须 console 模式**（Helper 走 stdin/stdout JSONL 协议，--windowed 会断协议）
+- [x] **「本次隐藏 / 本次关闭」**：Helper 右键菜单（本次隐藏/本次关闭），CLOSED 消息 → Host `restartSuppressed` 接线已验证（运行时单测：收到 closed 后不再自动重启）
 
 ## 注意事项
 
