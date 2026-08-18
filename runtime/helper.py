@@ -524,7 +524,14 @@ def run_visual(recorder: EventRecorder, snapshot_path: Path | None = None) -> in
             if max_x < min_x:
                 max_x = min_x
             card_x = min(max(card_x, min_x), max_x)
-            return card_x, 7, card_width, card_height
+            # 气泡底部贴住宠物实际顶部（按当前帧实际高度，而非 maxFrameHeight
+            # 预留——walk 帧更高、idle 帧更矮，固定顶部会让气泡离宠物过远），
+            # 留 ~10px 间隙。窗口本身按 maxFrame 预留高度，透明区域无碍。
+            frame_h = self.pixmaps[self.model.frame].height() * self.scale
+            pet_top = self.height() - frame_h - 8
+            gap = round(6 * self.bubble_scale)
+            card_y = max(4, pet_top - card_height - gap)
+            return card_x, card_y, card_width, card_height
 
         def _restore_visible_position(self) -> None:
             pet_width, pet_height = self._pet_size()

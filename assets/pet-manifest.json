@@ -14,18 +14,18 @@
   "stateMap": {
     "IDLE": "idle",
     "THINKING": "idle",
-    "WORKING": "idle",
+    "WORKING": "eat",
     "WAITING": "sleep",
     "SUCCESS": "eat",
     "ERROR": "idle",
     "DISCONNECTED": "idle"
   },
   "workingActivityMap": {
-    "searching": "idle",
-    "commanding": "idle",
-    "editing": "idle",
-    "testing": "idle",
-    "using-tool": "idle"
+    "searching": "eat",
+    "commanding": "eat",
+    "editing": "eat",
+    "testing": "eat",
+    "using-tool": "eat"
   },
   "idleMicroClips": []
 }
