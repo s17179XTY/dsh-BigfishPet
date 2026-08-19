@@ -146,6 +146,39 @@ def run_visual(recorder: EventRecorder, snapshot_path: Path | None = None) -> in
             "DISCONNECTED": "已断开",
         }
 
+        # 旧版鲸鱼公主台词库（bigfish/main.js 时代，点击互动/自言自语随机抽取）
+        PRINCESS_LINES = [
+            "我是深海里的鲸鱼公主，很高兴见到你~",
+            "欢迎回来，我的小伙伴！",
+            "鲸鱼公主来啦，今天也要一起加油哦！",
+            "深海那么大，但我只想陪你~",
+            "哼，都不理我，我要吐泡泡了~",
+            "抱抱我嘛，我可是会喷水的公主！",
+            "你忙的时候，我会乖乖在旁边看着你~",
+            "我的尾巴会发光，但只有你才看得到哦~",
+            "小知识：蓝鲸的心跳每分钟只有 6 次哦~",
+            "你知道吗？鲸鱼其实是哺乳动物，不是鱼！",
+            "鲸鱼唱歌能传 1600 公里远，我的歌声呢~",
+            "座头鲸会跳出海面，像是在跳芭蕾~",
+            "小知识：抹香鲸可以潜水 90 分钟不上来！",
+            "要不要我帮你把今天的任务列个清单？",
+            "查资料、写报告、做 PPT，说一声就行~",
+            "记得喝口水休息一下，别太累啦！",
+            "作业写完记得检查一遍哦~",
+            "今天也要元气满满！",
+            "你已经很棒了，剩下的事交给我！",
+            "别怕麻烦，我一直都在~",
+            "要我帮忙吗？",
+        ]
+
+        # 空闲自言自语：IDLE 状态每 45–90 秒随机冒一句台词气泡
+        CHATTER_MIN_MS = 45000
+        CHATTER_MAX_MS = 90000
+        # 空闲自动入睡：IDLE 持续 3 分钟无任务 → sleep 动画（与走动互斥：
+        # 入睡后不再响应走动；任务消息到来立即唤醒）。可用环境变量
+        # DSH_DAFEIYU_IDLE_SLEEP_MS 覆盖（毫秒），便于测试与调参。
+        IDLE_SLEEP_MS = int(os.environ.get("DSH_DAFEIYU_IDLE_SLEEP_MS") or (3 * 60 * 1000))
+
         def __init__(self) -> None:
             super().__init__()
             self.layout_path = default_layout_path()
@@ -225,6 +258,15 @@ def run_visual(recorder: EventRecorder, snapshot_path: Path | None = None) -> in
             self.micro_timer.timeout.connect(self._play_idle_micro)
             if not self.reduced_motion:
                 self._schedule_micro()
+            # 空闲自言自语 + 自动入睡：只在 IDLE 且无任务时活动。
+            self.chatter_timer = QTimer(self)
+            self.chatter_timer.setSingleShot(True)
+            self.chatter_timer.timeout.connect(self._chatter_once)
+            self.sleep_timer = QTimer(self)
+            self.sleep_timer.setSingleShot(True)
+            self.sleep_timer.timeout.connect(self._fall_asleep)
+            self.asleep = False
+            self._schedule_idle_behavior()
             self.snapshot_saved = False
             self.setWindowTitle("DSH 大肥鱼")
             self.setWindowFlags(
@@ -244,6 +286,9 @@ def run_visual(recorder: EventRecorder, snapshot_path: Path | None = None) -> in
                 return
             previous_frame = self.model.frame
             previous_clip = self.model.active_clip_name
+            if kind in {"task", "state", "pulse"}:
+                # 任何任务状态消息都会唤醒睡眠中的宠物
+                self._wake_up()
             if kind == "task":
                 self.task = str(message.get("task", ""))
                 self._show_status(
@@ -349,7 +394,7 @@ def run_visual(recorder: EventRecorder, snapshot_path: Path | None = None) -> in
             self.update()
 
         def _play_idle_micro(self) -> None:
-            if self.reduced_motion:
+            if self.reduced_motion or self.asleep:
                 return
             previous_frame = self.model.frame
             previous_clip = self.model.active_clip_name
@@ -409,11 +454,16 @@ def run_visual(recorder: EventRecorder, snapshot_path: Path | None = None) -> in
             # Expire an underlying pulse before revealing it after a long drag.
             self.model.advance(0, now_ms)
             self.model.clear_overlay()
-            self._sync_frame_transition(previous_frame, previous_clip, allow_fade=False)
+            if self.asleep:
+                # 拖动不唤醒；继续睡
+                self.model.play_overlay("sleep")
+                self._sync_frame_transition(previous_frame, self.model.active_clip_name, allow_fade=False)
+            else:
+                self._sync_frame_transition(previous_frame, previous_clip, allow_fade=False)
             self.dragging = False
             self.last_tick_ms = now_ms
             self.animation_timer.start(40 if self.reduced_motion else 20)
-            if not self.reduced_motion:
+            if not self.reduced_motion and not self.asleep:
                 self._schedule_micro()
 
         def _schedule_micro(self) -> None:
@@ -427,6 +477,54 @@ def run_visual(recorder: EventRecorder, snapshot_path: Path | None = None) -> in
             }
             lower, upper = intervals.get(self.activity_level, intervals["normal"])
             self.micro_timer.start(random.randint(lower, upper))
+
+        # ------------------------------------------------------------------
+        # 空闲行为：自言自语（45–90s 一句台词）+ 自动入睡（IDLE 3 分钟）
+        # ------------------------------------------------------------------
+        def _idle_now(self) -> bool:
+            return self.model.base_state == "IDLE" \
+                and self.model.pulse_state is None \
+                and self.model.overlay_clip_name is None
+
+        def _schedule_idle_behavior(self) -> None:
+            self.chatter_timer.stop()
+            self.sleep_timer.stop()
+            if not self._idle_now():
+                return
+            # 入睡不要和走动重叠：入睡计时期间走动（若未来接入）会改变
+            # base_state/overlay，_idle_now 变为 False，此处两个定时器即停。
+            self.sleep_timer.start(self.IDLE_SLEEP_MS)
+            self.chatter_timer.start(random.randint(self.CHATTER_MIN_MS, self.CHATTER_MAX_MS))
+
+        def _chatter_once(self) -> None:
+            if not self._idle_now() or self.asleep:
+                self._schedule_idle_behavior()
+                return
+            line = random.choice(self.PRINCESS_LINES)
+            self._show_overlay(line, self.status_detail, "IDLE", 3200)
+            self.chatter_timer.start(random.randint(self.CHATTER_MIN_MS, self.CHATTER_MAX_MS))
+
+        def _fall_asleep(self) -> None:
+            if not self._idle_now():
+                self._schedule_idle_behavior()
+                return
+            self.asleep = True
+            self.chatter_timer.stop()
+            self.micro_timer.stop()
+            self._play_model_overlay("sleep", allow_fade=False)
+            self._show_status("睡着了…", "任务来了我就醒哦", "IDLE", None)
+
+        def _wake_up(self) -> None:
+            if not self.asleep:
+                self._schedule_idle_behavior()
+                return
+            self.asleep = False
+            self.model.clear_overlay()
+            self._sync_frame_transition(self.model.frame, self.model.active_clip_name, allow_fade=False)
+            self.update()
+            if not self.reduced_motion:
+                self._schedule_micro()
+            self._schedule_idle_behavior()
 
         def _bubble_visible(self) -> bool:
             if self.bubble_mode == "hidden":
@@ -946,72 +1044,126 @@ def run_visual(recorder: EventRecorder, snapshot_path: Path | None = None) -> in
             pet_x, pet_y, pet_width, pet_height = self._pet_rect()
             relative_x = max(0.0, x - pet_x)
             relative_y = max(0.0, y - pet_y)
+            line = random.choice(self.PRINCESS_LINES)
             if relative_y < pet_height * 0.45:
                 self._play_model_overlay("head_pat")
-                self._show_overlay("摸摸也不能让我少干活哦~", self.status_detail, self.status_state, 1800)
+                self._show_overlay(line, self.status_detail, self.status_state, 1800)
             elif relative_x > pet_width * 0.72:
                 self._play_model_overlay("tail")
-                self._show_overlay("尾巴不是进度条啦！", self.status_detail, self.status_state, 1500)
+                self._show_overlay(line, self.status_detail, self.status_state, 1500)
             else:
                 self._play_model_overlay("poke")
-                self._show_overlay("戳我干嘛，任务还在跑呢", self.status_detail, self.status_state, 1500)
+                self._show_overlay(line, self.status_detail, self.status_state, 1500)
 
         def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
             if event.button() == Qt.MouseButton.LeftButton:
                 self._play_model_overlay("head_pat")
-                self._show_overlay("好啦好啦，知道你喜欢我~", self.status_detail, self.status_state, 1800)
+                self._show_overlay(random.choice(self.PRINCESS_LINES), self.status_detail, self.status_state, 1800)
 
         def contextMenuEvent(self, event: Any) -> None:
-            menu = QMenu(self)
-            size_menu = menu.addMenu("大小")
-            size_actions = {}
-            for label, scale in (("小", 0.8), ("标准", 1.0), ("大", 1.25)):
-                action = size_menu.addAction(label)
-                action.setCheckable(True)
-                action.setChecked(abs(self.scale - scale) < 0.05)
-                size_actions[action] = scale
-            bubble_size_menu = menu.addMenu("气泡大小")
-            bubble_size_actions = {}
-            for label, bubble_scale in (("小", 0.8), ("标准", 1.0), ("大", 1.2)):
-                action = bubble_size_menu.addAction(label)
-                action.setCheckable(True)
-                action.setChecked(abs(self.bubble_scale - bubble_scale) < 0.05)
-                bubble_size_actions[action] = bubble_scale
-            reduced_action = menu.addAction("减少动态")
-            reduced_action.setCheckable(True)
-            reduced_action.setChecked(self.reduced_motion)
-            open_webui_action = menu.addAction("打开 WebUI")
-            menu.addSeparator()
-            hide_action = menu.addAction("本次隐藏")
-            exit_action = menu.addAction("本次关闭")
-            selected = menu.exec(event.globalPos())
-            if selected in size_actions:
-                self.scale = size_actions[selected]
-                self._apply_window_size()
-                self._move_to_pet(self.pet_x, self.pet_y)
-                self._save_layout()
-            elif selected in bubble_size_actions:
-                self.bubble_scale = bubble_size_actions[selected]
-                self._apply_window_size()
-                self._move_to_pet(self.pet_x, self.pet_y)
-                self._save_layout()
-            elif selected == reduced_action:
-                self.reduced_motion = reduced_action.isChecked()
-                self.animation_timer.setInterval(40 if self.reduced_motion else 20)
-                if self.reduced_motion:
-                    self.micro_timer.stop()
-                else:
-                    self._schedule_micro()
-                self._save_layout()
-                self.update()
-            elif selected == open_webui_action:
+            # 右键 = 打开/最小化宿主（DeepSeek Harness APP 或 WebUI），无菜单。
+            # 自动检测：找到宿主进程（Bigfish.exe / DSH Desktop.exe）就 toggle
+            # 其主窗口（最小化 ↔ 还原聚焦）；找不到（纯 WebUI 模式）就打开
+            # WebUI 页面。
+            self._toggle_host_window()
+
+        @staticmethod
+        def _host_window_hwnd() -> int | None:
+            """Find the main window of the running DSH desktop app (if any)."""
+            try:
+                import ctypes
+                from ctypes import wintypes
+                user32 = ctypes.windll.user32
+                kernel32 = ctypes.windll.kernel32
+                target_pids: set[int] = set()
+
+                # Enumerate processes, remember PIDs whose exe matches a host.
+                Process32First = kernel32.Process32FirstW
+                Process32Next = kernel32.Process32NextW
+                CreateToolhelp32Snapshot = kernel32.CreateToolhelp32Snapshot
+                TH32CS_SNAPPROCESS = 0x00000002
+                INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+
+                class PROCESSENTRY32W(ctypes.Structure):
+                    _fields_ = [
+                        ("dwSize", wintypes.DWORD),
+                        ("cntUsage", wintypes.DWORD),
+                        ("th32ProcessID", wintypes.DWORD),
+                        ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
+                        ("th32ModuleID", wintypes.DWORD),
+                        ("cntThreads", wintypes.DWORD),
+                        ("th32ParentProcessID", wintypes.DWORD),
+                        ("pcPriClassBase", ctypes.c_long),
+                        ("dwFlags", wintypes.DWORD),
+                        ("szExeFile", ctypes.c_wchar * 260),
+                    ]
+
+                snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+                if not snapshot or snapshot == INVALID_HANDLE_VALUE:
+                    return None
+                try:
+                    entry = PROCESSENTRY32W()
+                    entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+                    if Process32First(snapshot, ctypes.byref(entry)):
+                        while True:
+                            name = entry.szExeFile.lower()
+                            if "bigfish.exe" in name or "dsh desktop.exe" in name or "deepseek harness" in name:
+                                target_pids.add(int(entry.th32ProcessID))
+                            if not Process32Next(snapshot, ctypes.byref(entry)):
+                                break
+                finally:
+                    kernel32.CloseHandle(snapshot)
+
+                if not target_pids:
+                    return None
+
+                # Find the first visible top-level window owned by a host PID.
+                EnumWindows = user32.EnumWindows
+                GetWindowThreadProcessId = user32.GetWindowThreadProcessId
+                IsWindowVisible = user32.IsWindowVisible
+                found = {"hwnd": None}
+
+                @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+                def callback(hwnd, _lparam):
+                    pid = wintypes.DWORD()
+                    GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                    if int(pid.value) in target_pids and IsWindowVisible(hwnd):
+                        found["hwnd"] = int(hwnd)
+                        return False
+                    return True
+
+                EnumWindows(callback, 0)
+                return found["hwnd"]
+            except Exception:
+                return None
+
+        def _toggle_host_window(self) -> None:
+            hwnd = self._host_window_hwnd()
+            if hwnd is None:
+                # WebUI 模式（或宿主未运行）：打开 WebUI 页面
                 QDesktopServices.openUrl(QUrl(self.webui_url))
-            elif selected == hide_action:
-                self.hide()
-            elif selected == exit_action:
-                self._save_layout()
-                emit_reply("closed", reason="user")
-                QApplication.quit()
+                return
+            try:
+                import ctypes
+                from ctypes import wintypes
+                user32 = ctypes.windll.user32
+                SW_MINIMIZE = 6
+                SW_RESTORE = 9
+                SW_SHOW = 5
+                if user32.IsIconic(hwnd):
+                    # 已最小化 → 还原并聚焦
+                    user32.ShowWindow(hwnd, SW_RESTORE)
+                    user32.ShowWindow(hwnd, SW_SHOW)
+                    user32.SetForegroundWindow(hwnd)
+                elif user32.IsWindowVisible(hwnd):
+                    # 可见未最小化 → 最小化到任务栏
+                    user32.ShowWindow(hwnd, SW_MINIMIZE)
+                else:
+                    # 隐藏 → 显示并聚焦
+                    user32.ShowWindow(hwnd, SW_SHOW)
+                    user32.SetForegroundWindow(hwnd)
+            except Exception:
+                QDesktopServices.openUrl(QUrl(self.webui_url))
 
     application = QApplication(sys.argv[:1])
     application.setQuitOnLastWindowClosed(False)

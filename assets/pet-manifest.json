@@ -13,7 +13,7 @@
   },
   "stateMap": {
     "IDLE": "idle",
-    "THINKING": "idle",
+    "THINKING": "eat",
     "WORKING": "eat",
     "WAITING": "sleep",
     "SUCCESS": "eat",
