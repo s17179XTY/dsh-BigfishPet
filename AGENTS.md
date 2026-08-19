@@ -5,7 +5,7 @@
 `dsh-bigfishpet` 把 Bigfish 的桌面宠物（**鲸鱼娘**）做成 DeepSeek Harness 的一等公民：
 
 - **DSH 插件**（仓库根目录）：**通用插件，不绑定任何特定壳/客户端**（Bigfish、dsh-desktop 都只是它运行的环境之一）。任何 DeepSeek Harness 环境只要执行 `dsh plugin --profile web add github:s17179XTY/dsh-BigfishPet`（或用对应 profile 的 `dsh plugin add`）即可安装。它在 DSH 设置里提供「桌宠」卡片（**dsh-dafeiyu 同款**：即时保存、气泡显示/气泡大小/活跃程度/减少动态/响应子 Agent/走动冷却等），配置存 `~/.dsh/pet.json`；内置**状态机 + 桌面 Helper**（照抄 dsh-dafeiyu 架构）：监听 DSH 标准 `session/event` 归约为 思考/工作/等待/完成/出错 + 阶段/待办/进度，通过 JSONL 协议实时驱动 **PySide6 透明宠物窗口**（`runtime/helper.py`）。**无亲密度/零食系统**（已移除）。
-- **桌面 Helper**（`runtime/` + `assets/`）：**PySide6 透明窗口**（`WA_TranslucentBackground`）——**本机已验证可正常合成**（此前的「不合成透明窗口」结论只对 Electron 成立，对 Qt 无效）；大圆角状态卡、浅底深图形状态图标、程序化动作（breathe 等）、拖动/右键菜单全部照抄 dsh-dafeiyu `helper.py`。窗口由插件 spawn，**与壳无关**——任何运行本插件的 DSH 环境都会出现宠物（一键安装，无壳侧整合）。
+- **桌面 Helper**（`runtime/` + `assets/`）：**PySide6 透明窗口**（`WA_TranslucentBackground`）——**本机已验证可正常合成**（此前的「不合成透明窗口」结论只对 Electron 成立，对 Qt 无效）；大圆角状态卡、浅底深图形状态图标、程序化动作（breathe 等）、拖动、点击互动（旧版鲸鱼公主台词库随机台词）、空闲自言自语（45–90s 一句）、空闲 3 分钟自动入睡（任务消息或点击唤醒）、**右键无菜单 = 打开/最小化宿主**（ctypes 检测 Bigfish/DSH Desktop 进程，无则开 WebUI）。窗口由插件 spawn，**与壳无关**——任何运行本插件的 DSH 环境都会出现宠物（一键安装，无壳侧整合）。
 
 ## 目录
 
@@ -15,11 +15,13 @@ dsh-bigfishpet/
 ├── lib/client.js              # 插件 Client：「桌宠」设置卡片（dsh-dafeiyu 同款：即时保存、全部可配置项）
 ├── lib/protocol.js            # Helper JSONL 协议（照抄 dsh-dafeiyu：hello/state/pulse/task/tasks/config/ping/shutdown）
 ├── lib/companion-reducer.js   # 状态机归约器（照抄 dsh-dafeiyu：事件 → STATE/PULSE/TASK/TASKS 消息）
+├── lib/status-copy.js         # 鲸鱼娘人设文案库（statusCopy/activityCopy/activityStage/taskCopy）
 ├── lib/helper-process.js      # Helper 进程管理（照抄 dsh-dafeiyu：spawn/心跳/崩溃重启/快照重放）
 ├── runtime/                   # PySide6 桌面 Helper（照抄 dsh-dafeiyu：helper.py + animation_model.py + layout_store.py）
 ├── assets/
 │   ├── pet-manifest.json      # 动画清单（10 帧 → 状态映射；动作帧就位后升级）
 │   └── pet/*.png              # 鲸鱼娘动画帧（与 bigfish/assets/pet 同步）
+├── scripts/build-helper.ps1   # PyInstaller 打包 Helper → runtime/bin/win32-x64/dsh-bigfishpet-helper.exe
 ├── cordis.patch.yml           # bundle insert（- insert: id: bigfish-pet）——bundle 加载器把它作为本插件的 loader entry（见「⚠️ 安装与崩溃教训」）
 ├── package.json               # 插件包（dsh.bundle.patch + dsh.client；files 含 lib/runtime/assets）
 └── bigfish/                   # 旧 Electron 壳侧桌宠（已停用：main.js 的 DISABLE_ELECTRON_PET=true；保留作参考/回退）
@@ -28,6 +30,7 @@ dsh-bigfishpet/
 ## 功能边界（改代码 / 排查「看不到宠物」前先读）
 
 - **窗口由插件自带的 Helper 创建**（`runtime/helper.py`，PySide6 透明窗口）——任何 DSH 环境只要装了插件就会出宠物，**无需壳侧整合**（旧架构的「壳侧整合」已废弃，`bigfish/` 仅作参考）。
+- **Helper 只在启动时读取 `assets/pet-manifest.json`**：改动画帧/状态映射后必须**重启 Helper**（杀掉 Helper 进程，插件崩溃重启机制会自动 spawn 新进程）才生效——只同步文件不重启，看到的还是旧动画。
 - 排查「看不到宠物」：(1) 重启 DSH（插件启动时 spawn Helper）；(2) `~/.dsh/pet.json` 的 `display.visible` 是否为 `true`；(3) Python/PySide6 是否可用（`py -3 -c "import PySide6"`；正式版将打包 exe 随插件分发）；(4) Helper 冒烟测试：`py -3 runtime/helper.py`（需从插件目录跑，读 assets/pet-manifest.json）。
 
 ## ⚠️ 安装与崩溃教训（必读）
@@ -70,27 +73,37 @@ dsh-bigfishpet/
 ## 验证方式
 
 ```powershell
-# 语法检查（仓库 + 已安装插件）
-$node = 'E:\AI\DSH Desktop\resources\app\node_modules\node\bin\node.exe'
+# 语法检查（仓库 + 已安装插件；node 用 Bigfish 内嵌的 node-runtime）
+$node = 'E:\AI\DSH\Bigfish\resources\node-runtime\node.exe'
 & $node --check D:\AI\DSH\dsh-bigfishpet\lib\index.js
+& $node --check D:\AI\DSH\dsh-bigfishpet\lib\companion-reducer.js
 & $node --check D:\AI\DSH\dsh-bigfishpet\bigfish\main.js
 & $node --check D:\AI\DSH\dsh-bigfishpet\bigfish\pet.js
 
-# 轮廓数据（pet-shapes.json）是从 PNG 生成的；改了动画帧后要重新生成
+# Helper Python 语法 + 冒烟
+py -3 -c "import ast; ast.parse(open(r'D:\AI\DSH\dsh-bigfishpet\runtime\helper.py', encoding='utf-8').read())"
+
+# 打包 Helper exe（分发前）
+powershell -ExecutionPolicy Bypass -File .\scripts\build-helper.ps1
+
+# 轮廓数据（pet-shapes.json）是从 PNG 生成的；改了动画帧后要重新生成（仅旧壳用）
 & .\scripts\gen-shapes.ps1   # 高归一化到 160 空间、alpha>200、IHDR 原始尺寸
 ```
 
 插件安装路径（同步目标）：`C:\Users\Administrator\.dsh\profiles\web\node_modules\bigfish-pet\`
 Bigfish 应用目录（壳侧同步目标）：`E:\AI\DSH\Bigfish\resources\app\`（注意：不是 `E:\AI\Bigfish`）
+DSH CLI（Bigfish 内嵌）：`E:\AI\DSH\Bigfish\resources\node-runtime\node.exe E:\AI\DSH\Bigfish\resources\dsh\node_modules\@deepseek-ai\dsh\lib\bin.js`
 
-改完插件 Host/Client 后要同步到已安装插件；改完壳侧文件后要同步到 `resources\app` 并重启 Bigfish 生效。
+改完插件 Host/Client 后要同步到已安装插件；改完壳侧文件后要同步到 `resources\app` 并重启 Bigfish 生效。**改了 helper.py / pet-manifest.json 后要杀掉 Helper 进程让它重启**（插件崩溃重启机制自动 spawn 新进程）。
 
 ## 待办（大肥鱼有、我们暂未做的功能，后续实现）
 
-- [ ] **状态动作帧**（需要美术资源）：每状态专属帧——思考（合十）、工作（拿扫帚）、等待（抬手）、完成（微笑）、出错（生气）+ 空闲微动作（眨眼/观察）+ 程序化 motion（think 浮动 / work 抖动 / bounce 跳跃 / shake 抖动 / wait 轻晃）。帧就位后改 `assets/pet-manifest.json` 的 clips/stateMap/idleMicroClips（Helper 已支持全部机制）
+- [ ] **状态动作帧**（需要美术资源）：每状态专属帧——思考（合十）、工作（拿扫帚）、等待（抬手）、完成（微笑）、出错（生气）+ 空闲微动作（眨眼/观察）+ 程序化 motion（think 浮动 / work 抖动 / bounce 跳跃 / shake 抖动 / wait 轻晃）。帧就位后改 `assets/pet-manifest.json` 的 clips/stateMap/idleMicroClips（Helper 已支持全部机制）。**当前临时映射**：THINKING/WORKING→eat（跑任务就吃东西）、WAITING→sleep、SUCCESS→eat、IDLE→idle
 - [x] **多任务状态列表**：≥2 个活跃会话时状态卡同时列出各任务（reducer 输出 TASKS 消息，Helper 的 `_draw_multi_task_card` 已实现，接线已验证：smoke test 覆盖 TASKS 输出/优先级/dispose 清空）
 - [x] **Helper 打包 exe**：`scripts/build-helper.ps1`（PyInstaller onefile + console，--add-data assets）→ `runtime/bin/win32-x64/dsh-bigfishpet-helper.exe`（已打包验证 headless + visual 双冒烟通过；exe 是构建产物，已 gitignore，分发前重新构建）。**必须 console 模式**（Helper 走 stdin/stdout JSONL 协议，--windowed 会断协议）
-- [x] **「本次隐藏 / 本次关闭」**：Helper 右键菜单（本次隐藏/本次关闭），CLOSED 消息 → Host `restartSuppressed` 接线已验证（运行时单测：收到 closed 后不再自动重启）
+- [x] **空闲自动入睡**：IDLE 持续 3 分钟无任务 → sleep 动画（与走动互斥；任务消息或**点击宠物**唤醒切回 idle；`DSH_DAFEIYU_IDLE_SLEEP_MS` 可调毫秒）
+- [x] **台词库 + 自言自语**：旧版鲸鱼公主台词库恢复（点击互动随机台词 + 空闲 45–90s 自言自语）
+- [x] **右键 = 打开/最小化宿主**：右键菜单已移除；ctypes 检测 Bigfish.exe / DSH Desktop.exe → toggle 主窗口（最小化↔还原聚焦），无宿主进程则打开 WebUI（`http://127.0.0.1:3080/`）。CLOSED → Host `restartSuppressed` 接线仍保留（运行时单测通过），但「本次隐藏/本次关闭」入口随菜单移除
 
 ## 注意事项
 
