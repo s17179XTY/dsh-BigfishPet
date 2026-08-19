@@ -1041,10 +1041,15 @@ def run_visual(recorder: EventRecorder, snapshot_path: Path | None = None) -> in
             self.dragging = False
 
         def _play_click_interaction(self, x: float, y: float) -> None:
+            line = random.choice(self.PRINCESS_LINES)
+            if self.asleep:
+                # 点击唤醒：动画切回 idle（站立），台词气泡提示
+                self._wake_up()
+                self._show_overlay(line, self.status_detail, "IDLE", 1800)
+                return
             pet_x, pet_y, pet_width, pet_height = self._pet_rect()
             relative_x = max(0.0, x - pet_x)
             relative_y = max(0.0, y - pet_y)
-            line = random.choice(self.PRINCESS_LINES)
             if relative_y < pet_height * 0.45:
                 self._play_model_overlay("head_pat")
                 self._show_overlay(line, self.status_detail, self.status_state, 1800)
@@ -1057,6 +1062,10 @@ def run_visual(recorder: EventRecorder, snapshot_path: Path | None = None) -> in
 
         def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
             if event.button() == Qt.MouseButton.LeftButton:
+                if self.asleep:
+                    self._wake_up()
+                    self._show_overlay(random.choice(self.PRINCESS_LINES), self.status_detail, "IDLE", 1800)
+                    return
                 self._play_model_overlay("head_pat")
                 self._show_overlay(random.choice(self.PRINCESS_LINES), self.status_detail, self.status_state, 1800)
 
